@@ -1,0 +1,20 @@
+{
+  "rules": {
+    "assistantChats": {
+      "$uid": {
+        // Chỉ chủ tài khoản đọc/ghi lịch sử chat của chính mình.
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "messages": {
+          "$msgId": {
+            ".validate": "newData.hasChildren(['role', 'content', 'createdAt']) && (newData.child('role').val() === 'user' || newData.child('role').val() === 'assistant') && newData.child('content').isString() && newData.child('content').val().length <= 4000"
+          }
+        }
+      }
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

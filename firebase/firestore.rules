@@ -55,13 +55,8 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
-    // Lịch sử hội thoại với Trợ lý AI — chỉ chủ tài khoản đọc.
-    // Ghi chỉ được thực hiện bởi Cloud Function (Admin SDK bỏ qua rules này),
-    // client KHÔNG được ghi trực tiếp để tránh giả mạo lịch sử hội thoại.
-    match /assistantChats/{uid}/messages/{msgId} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;
-    }
+    // Lịch sử hội thoại với Trợ lý AI giờ nằm ở Realtime Database
+    // (xem firebase/database.rules.json) — không còn ở Firestore.
 
     // Trạng thái "trực tiếp" do tiện ích trình duyệt ghi mỗi phút — cho biết
     // học sinh đang ở trang giải trí (kèm nền tảng) hay trang khác, KHÔNG lưu

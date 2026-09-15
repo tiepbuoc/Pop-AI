@@ -7,21 +7,21 @@ import {
   where, orderBy, limit, getDocs, serverTimestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  getFunctions, httpsCallable
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+  getDatabase, ref, push, get, query as rtdbQuery, limitToLast, serverTimestamp as rtdbServerTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const functions = getFunctions(app); // region mặc định us-central1, giống nơi deploy functions
+export const rtdb = getDatabase(app); // Realtime Database — dùng cho lịch sử chat Trợ lý AI
 export const googleProvider = new GoogleAuthProvider();
 
 export {
   signInWithPopup, signOut, onAuthStateChanged,
   doc, getDoc, setDoc, updateDoc, collection, addDoc, query,
   where, orderBy, limit, getDocs, serverTimestamp, onSnapshot,
-  httpsCallable
+  ref, push, get, rtdbQuery, limitToLast, rtdbServerTimestamp
 };
 
 // ---- Helpers dùng chung ----

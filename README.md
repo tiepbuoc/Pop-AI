@@ -121,10 +121,10 @@ Muốn chạy thử trên máy trước khi upload: mở `index.html` bằng m�
 `npx serve .` hoặc `python3 -m http.server` (chạy ngay tại thư mục gốc dự án). Firebase Auth popup cần
 chạy trên `http://localhost` hoặc domain đã khai ở Authorized domains — không mở trực tiếp bằng `file://`.
 
-## 5. Deploy Firestore Rules + Cloud Functions (backend dùng chung)
+## 5. Deploy Firestore Rules + Realtime Database Rules (backend dùng chung)
 
-Cấu hình backend (`firebase.json`, `firestore.rules`, `functions/`) nằm gọn trong `firebase/` — tách
-khỏi phần tĩnh ở gốc để không lẫn vào GitHub Pages. Cần Node.js + Firebase CLI, **không còn `firebase
+Cấu hình backend (`firebase.json`, `firestore.rules`, `database.rules.json`) nằm gọn trong `firebase/` —
+tách khỏi phần tĩnh ở gốc để không lẫn vào GitHub Pages. Cần Node.js + Firebase CLI, **không còn `firebase
 deploy --only hosting`** vì web app giờ nằm ở GitHub Pages:
 ```bash
 npm install -g firebase-tools
@@ -132,8 +132,10 @@ firebase login
 cd pop-ai/firebase
 firebase use tuanizz        # project đã khai sẵn trong .firebaserc
 firebase deploy --only firestore:rules
-firebase deploy --only functions
+firebase deploy --only database
 ```
+Vào **Build → Realtime Database** trên Firebase Console → **Create database** (nếu chưa có) trước khi
+deploy rules ở trên — `databaseURL` đã có sẵn trong `firebase-config.js`.
 
 ## 6. Deploy PHẦN 2 — Chrome Extension + tạo OAuth Client ID
 
@@ -170,36 +172,29 @@ Extension ID cố định ngay từ lúc tạo mục trên Store, tạo OAuth Cl
 5. Giáo viên: đăng nhập, chọn "Tôi là giáo viên", nhập mã xác thực đã tạo ở bước 3 → tạo lớp → chia sẻ
    **mã lớp** cho học sinh nhập ở mục Cài đặt.
 
-## 8. (Mới) Bật Trợ lý AI thật — Cloud Functions
+## 8. (Mới) Bật Trợ lý AI thật — chạy trực tiếp trên client (bản test, không dùng Cloud Functions)
 
-Trợ lý trong mục "Trợ lý AI" của web app giờ gọi một LLM thật (đọc kế hoạch + nhật ký của đúng học sinh
-đang chat), thay vì if/else cố định. API key được giấu ở server bằng Cloud Functions Secret.
+Trợ lý trong mục "Trợ lý AI" của web app gọi một LLM thật (đọc kế hoạch + nhật ký của đúng học sinh đang
+chat), thay vì if/else cố định. **Bản này không dùng Cloud Functions** — mọi thứ (đọc dữ liệu Firestore,
+gọi LLM, lưu lịch sử chat) chạy thẳng trong trình duyệt, để đơn giản khi test.
 
-1. Cloud Functions cần gói thanh toán **Blaze** (pay-as-you-go) của Firebase — vẫn có hạn mức miễn phí
-   hằng tháng, dự án quy mô lớp học/đồ án gần như không tốn phí. Bật ở **Project settings → Usage and billing**.
-2. Cài dependencies:
-   ```bash
-   cd pop-ai/firebase/functions
-   npm install
-   ```
-   > `npm install` tạo ra thư mục `node_modules/` khá nặng — nếu bạn dùng cách upload kéo-thả ở mục 4
-   > (không dùng Git), **đừng kéo `node_modules/` lên GitHub** (không cần thiết, `firebase deploy` tự cài
-   > lại phụ thuộc trên server). Dùng Git thì `.gitignore` đã loại trừ sẵn thư mục này.
-3. Đặt API key làm **secret** (KHÔNG đặt trong code, KHÔNG commit lên git):
+> ⚠️ **Chỉ dùng để test.** API key nằm thẳng trong `js/assistant.js` (client-side) nên bất kỳ ai mở
+> DevTools/View Source trên trang web đều lấy được key này. Trước khi cho học sinh dùng thật, hãy đổi/thu
+> hồi key test ở `shopaikey.com`, tạo key mới, và cân nhắc quay lại phương án giấu key qua backend
+> (Cloud Function hoặc một proxy tương đương) trước khi công khai rộng rãi.
+
+1. Mở `js/assistant.js`, sửa hằng số `API_KEY` ở đầu file thành API key thật của bạn (và `API_URL`,
+   `MODEL` nếu dùng nhà cung cấp khác `api.shopaikey.com` / `gpt-5.4-nano`).
+2. Tạo **Realtime Database** trên Firebase Console (nếu chưa có — xem mục 5) rồi deploy rules:
    ```bash
    cd pop-ai/firebase
-   firebase functions:secrets:set POPAI_API_KEY
-   # dán API key khi được hỏi, ví dụ: sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   firebase deploy --only firestore:rules,database
    ```
-   > Key trong `chatbot.html` bạn dùng để test local **đã lộ ra ngoài** (nằm thẳng trong source).
-   > Nên đổi/thu hồi key đó ở `shopaikey.com` và tạo key mới riêng để đặt vào secret này.
-4. Deploy:
-   ```bash
-   firebase deploy --only functions,firestore:rules
-   ```
-5. Vào web app → mục **Trợ lý AI** → chat thử. Nếu đổi endpoint/model khác (không phải
-   `api.shopaikey.com` / `gpt-5.4-nano`), sửa 2 hằng số `API_URL`, `MODEL` đầu file
-   `firebase/functions/index.js` rồi deploy lại.
+   Lịch sử hội thoại được lưu ở Realtime Database (`assistantChats/{uid}/messages`) thay vì Firestore,
+   vì giờ client tự ghi trực tiếp (không còn Admin SDK của Cloud Function đứng giữa).
+3. Chỉ cần upload lại `js/assistant.js`, `js/firebase.js` lên GitHub (Add file → Upload files → Commit),
+   Pages tự cập nhật sau khoảng nửa phút.
+4. Vào web app → mục **Trợ lý AI** → chat thử.
 
 ## 9. (Mới) Can thiệp hành vi đúng lúc (friction nudge)
 
@@ -285,7 +280,7 @@ Không có bước cài đặt riêng — chỉ cần upload lại file lên Git
 - Chỉ đo được hành vi trên **trình duyệt máy tính**, không đo được app điện thoại (do giới hạn hệ điều hành, xem phần trao đổi trước).
 - Nếu một học sinh dùng nhiều máy tính khác nhau, mỗi máy ghi đè dữ liệu "hôm nay" của máy đó — dữ liệu tổng hợp giữa nhiều thiết bị chưa được cộng dồn (đủ dùng cho quy mô lớp học/nghiên cứu nhỏ; muốn chính xác hơn cần chuyển sang cộng dồn qua Cloud Functions).
 - Trước khi phát hành rộng rãi (Chrome Web Store), cần thêm Privacy Policy công khai vì extension xin quyền `identity` + theo dõi hoạt động duyệt web.
-- Trợ lý AI (mục 8) gọi API bên thứ ba (`api.shopaikey.com`) — nếu dịch vụ này đổi định dạng phản hồi hoặc ngừng hoạt động, cần cập nhật `firebase/functions/index.js`. Nội dung chat được lưu lại trong Firestore (`assistantChats`) để giữ ngữ cảnh; cân nhắc thêm chính sách xoá dữ liệu định kỳ nếu triển khai thật.
+- Trợ lý AI (mục 8) gọi API bên thứ ba (`api.shopaikey.com`) — nếu dịch vụ này đổi định dạng phản hồi hoặc ngừng hoạt động, cần cập nhật `js/assistant.js`. **API key hiện nằm thẳng trong mã nguồn client (chỉ để test)** — bất kỳ ai xem mã nguồn trang web đều lấy được key; đổi/thu hồi key trước khi triển khai thật. Nội dung chat được lưu lại trong Realtime Database (`assistantChats/{uid}/messages`) để giữ ngữ cảnh; cân nhắc thêm chính sách xoá dữ liệu định kỳ nếu triển khai thật.
 - Kiểm định thống kê (mục 11) dùng biến "sau can thiệp" là nhật ký/tự đánh giá **gần nhất**, không phải giá
   trị trung bình cả tuần — khi báo cáo chính thức nên nêu rõ điều này, hoặc sửa `student.js` để lưu thêm
   trung bình 3 ngày cuối vào `classes/{id}/students`.
