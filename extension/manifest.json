@@ -9,7 +9,7 @@
     "https://firestore.googleapis.com/*"
   ],
   "externally_connectable": {
-    "matches": ["https://TEN-TAI-KHOAN.github.io/*"]
+    "matches": ["https://tiepbuoc.github.io/*"]
   },
   "background": {
     "service_worker": "background.js",

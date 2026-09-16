@@ -11,7 +11,7 @@
  * 1. Extension đã cài trên trình duyệt (nếu chưa cài, sendMessage sẽ báo lỗi — bỏ qua,
  *    không ảnh hưởng gì tới việc dùng web app bình thường).
  * 2. `extension/manifest.json` có khai `externally_connectable.matches` trùng đúng domain
- *    web app đang chạy (vd: "https://TEN-TAI-KHOAN.github.io/*").
+ *    web app đang chạy (đã đặt sẵn: "https://tiepbuoc.github.io/*").
  * 3. POPAI_EXTENSION_ID bên dưới trùng đúng Extension ID thật (xem chrome://extensions
  *    sau khi Load unpacked extension — copy chuỗi 32 ký tự dưới tên "POP-AI Tracker").
  */

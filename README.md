@@ -59,7 +59,7 @@ Instagram Reels, Facebook Reels dạng web) — không đọc được app trên
 1. Vào https://console.firebase.google.com → **Add project** → đặt tên (VD: `pop-ai-truong-x`).
 2. Vào **Build → Authentication → Sign-in method** → bật **Google**.
 3. Vào **Build → Authentication → Settings → Authorized domains** → bấm **Add domain**, thêm domain
-   GitHub Pages sẽ dùng ở Phần 1, ví dụ `TEN-TAI-KHOAN.github.io`. **Bỏ qua bước này thì nút "Đăng nhập
+   GitHub Pages sẽ dùng ở Phần 1: **`tiepbuoc.github.io`**. **Bỏ qua bước này thì nút "Đăng nhập
    Google" trên web app sẽ báo lỗi `auth/unauthorized-domain`.**
 4. Vào **Build → Firestore Database** → **Create database** → chọn chế độ **Production**.
 5. Vào **Project settings → General → Your apps** → bấm biểu tượng `</>` để tạo **Web app** → copy đoạn
@@ -105,9 +105,9 @@ Giáo viên nhập đúng mã này khi đăng ký tài khoản lần đầu đ�
 5. Vào tab **Settings** (trên cùng repo) → mục **Pages** (menu bên trái) → ở **Branch** đổi từ **None**
    thành **main**, giữ nguyên thư mục **/ (root)** → **Save**.
 6. Đợi khoảng 1 phút, tải lại trang Settings → Pages sẽ hiện dòng **"Your site is live at
-   `https://TEN-TAI-KHOAN.github.io/pop-ai/`"** — đó là link cho học sinh/giáo viên truy cập.
+   `https://tiepbuoc.github.io/Pop-AI/`"** — đó là link cho học sinh/giáo viên truy cập.
 7. Quay lại **Firebase Console → Authentication → Settings → Authorized domains → Add domain**, thêm
-   đúng `TEN-TAI-KHOAN.github.io` (chỉ domain gốc, không cần `/pop-ai/`). **Bỏ qua bước này thì nút
+   đúng `tiepbuoc.github.io` (chỉ domain gốc, không cần `/Pop-AI/`). **Bỏ qua bước này thì nút
    "Đăng nhập Google" trên web sẽ báo lỗi `auth/unauthorized-domain`.**
 
 Từ lần sau, mỗi khi sửa file: vào đúng file trên GitHub (hoặc kéo thả file mới đè lên qua **Add file →
@@ -147,7 +147,7 @@ tạo gì ở Google Cloud Console.
 1. Mở `extension/config.js`, sửa `APP_URL` thành đúng link GitHub Pages vừa deploy ở bước 4.
 2. Mở `extension/manifest.json`, sửa `externally_connectable.matches` thành đúng domain đó, ví dụ:
    ```json
-   "externally_connectable": { "matches": ["https://ten-tai-khoan.github.io/*"] }
+   "externally_connectable": { "matches": ["https://tiepbuoc.github.io/*"] }
    ```
 3. Vào `chrome://extensions`, bật **Developer mode**, bấm **Load unpacked**, chọn thư mục `extension/` →
    Chrome cấp một **Extension ID** (chuỗi 32 ký tự) — copy lại.
