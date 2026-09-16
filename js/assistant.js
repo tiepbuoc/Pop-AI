@@ -20,7 +20,7 @@ import {
 // ---- Cấu hình LLM (test only — xem cảnh báo ở đầu file) ----
 const API_URL = "https://api.shopaikey.com/v1/chat/completions";
 const MODEL = "gpt-5.4-nano";
-const API_KEY = "DÁN_API_KEY_TEST_CỦA_BẠN_VÀO_ĐÂY"; // <-- thay bằng key thật để test
+const API_KEY = "sk-4150297863e3eee405805e8609648e6c5cebb1b502ffb46e"; // <-- thay bằng key thật để test
 
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_USER_MESSAGE_LEN = 1000;
