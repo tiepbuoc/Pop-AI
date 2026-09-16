@@ -32,7 +32,7 @@ pop-ai/
                ▼                                             │   không dùng được SDK)
         ┌───────────────────────────────────────────────────▼─────────┐
         │                      Firebase (backend chung)                │
-        │  Authentication (Google Sign-In) · Firestore · Cloud Functions│
+        │  Authentication (Email/Password) · Firestore · Cloud Functions   │
         └────────────────────────────────────────────────────────────┘
 ```
 
@@ -43,11 +43,13 @@ pop-ai/
   KHÔNG phải file web, chỉ dùng khi chạy `firebase deploy` từ máy, GitHub Pages không đụng tới (nhưng vì
   nằm trong cùng repo public nên thư mục này về mặt kỹ thuật vẫn xem được qua link trực tiếp — không có
   gì bí mật trong đó, API key thật nằm ở Secret Manager chứ không phải trong code).
-- **Extension** chạy hoàn toàn độc lập trên máy học sinh, tự đăng nhập Google riêng (`chrome.identity`),
-  tự đọc/ghi Firestore qua REST — **không** cần web app đang mở, không postMessage.
+- **Extension** chạy hoàn toàn độc lập trên máy học sinh, có form đăng nhập/đăng ký email+password ngay
+  trong popup của tiện ích, tự đọc/ghi Firestore qua REST — **không** cần mở web app, không cần
+  `externally_connectable`, không phụ thuộc Extension ID.
 - Hai phần chỉ chia sẻ **cùng một Firebase project** (Authentication + Firestore + Cloud Functions) làm
-  điểm đồng bộ dữ liệu. Học sinh đăng nhập cùng một tài khoản Google ở cả hai nơi là đủ để dữ liệu khớp
-  nhau — không cần cấu hình gì thêm giữa hai phần.
+  điểm đồng bộ dữ liệu. Học sinh dùng **cùng một email + mật khẩu** khi đăng nhập/đăng ký ở cả hai nơi là
+  đủ để dữ liệu khớp nhau (cùng một `uid`) — không cần cấu hình gì thêm giữa hai phần. Đăng ký ở web app
+  hay ở extension trước cũng được, miễn dùng lại đúng email đó ở nơi còn lại.
 
 Extension chỉ theo dõi được video ngắn xem **qua trình duyệt trên máy tính** (YouTube Shorts, TikTok,
 Instagram Reels, Facebook Reels dạng web) — không đọc được app trên điện thoại.
@@ -57,12 +59,10 @@ Instagram Reels, Facebook Reels dạng web) — không đọc được app trên
 ## 1. Tạo Firebase project (dùng chung cho cả 2 phần)
 
 1. Vào https://console.firebase.google.com → **Add project** → đặt tên (VD: `pop-ai-truong-x`).
-2. Vào **Build → Authentication → Sign-in method** → bật **Google**.
-3. Vào **Build → Authentication → Settings → Authorized domains** → bấm **Add domain**, thêm domain
-   GitHub Pages sẽ dùng ở Phần 1: **`tiepbuoc.github.io`**. **Bỏ qua bước này thì nút "Đăng nhập
-   Google" trên web app sẽ báo lỗi `auth/unauthorized-domain`.**
-4. Vào **Build → Firestore Database** → **Create database** → chọn chế độ **Production**.
-5. Vào **Project settings → General → Your apps** → bấm biểu tượng `</>` để tạo **Web app** → copy đoạn
+2. Vào **Build → Authentication → Sign-in method** → bật **Email/Password** (không cần bật Google —
+   cả web app lẫn extension giờ đăng nhập bằng email tự đặt + mật khẩu, không qua tài khoản Google).
+3. Vào **Build → Firestore Database** → **Create database** → chọn chế độ **Production**.
+4. Vào **Project settings → General → Your apps** → bấm biểu tượng `</>` để tạo **Web app** → copy đoạn
    `firebaseConfig`.
 
 ## 2. Điền cấu hình
@@ -106,9 +106,9 @@ Giáo viên nhập đúng mã này khi đăng ký tài khoản lần đầu đ�
    thành **main**, giữ nguyên thư mục **/ (root)** → **Save**.
 6. Đợi khoảng 1 phút, tải lại trang Settings → Pages sẽ hiện dòng **"Your site is live at
    `https://tiepbuoc.github.io/Pop-AI/`"** — đó là link cho học sinh/giáo viên truy cập.
-7. Quay lại **Firebase Console → Authentication → Settings → Authorized domains → Add domain**, thêm
-   đúng `tiepbuoc.github.io` (chỉ domain gốc, không cần `/Pop-AI/`). **Bỏ qua bước này thì nút
-   "Đăng nhập Google" trên web sẽ báo lỗi `auth/unauthorized-domain`.**
+
+Đăng nhập bằng email/password không cần khai domain ở Authentication → Settings → Authorized domains
+(bước đó chỉ bắt buộc cho đăng nhập Google/OAuth, dự án này không còn dùng).
 
 Từ lần sau, mỗi khi sửa file: vào đúng file trên GitHub (hoặc kéo thả file mới đè lên qua **Add file →
 Upload files**) → Commit changes — Pages tự cập nhật lại sau khoảng nửa phút, không cần làm lại bước 5-6.
@@ -118,8 +118,8 @@ Upload files**) → Commit changes — Pages tự cập nhật lại sau khoản
 > thế này.
 
 Muốn chạy thử trên máy trước khi upload: mở `index.html` bằng một local server bất kỳ, ví dụ
-`npx serve .` hoặc `python3 -m http.server` (chạy ngay tại thư mục gốc dự án). Firebase Auth popup cần
-chạy trên `http://localhost` hoặc domain đã khai ở Authorized domains — không mở trực tiếp bằng `file://`.
+`npx serve .` hoặc `python3 -m http.server` (chạy ngay tại thư mục gốc dự án) — không mở trực tiếp bằng
+`file://` vì Firebase SDK không hoạt động đúng trên giao thức đó.
 
 ## 5. Deploy Firestore Rules + Realtime Database Rules (backend dùng chung)
 
@@ -137,41 +137,31 @@ firebase deploy --only database
 Vào **Build → Realtime Database** trên Firebase Console → **Create database** (nếu chưa có) trước khi
 deploy rules ở trên — `databaseURL` đã có sẵn trong `firebase-config.js`.
 
-## 6. Deploy PHẦN 2 — Chrome Extension (đăng nhập qua web app, không cần OAuth Client ID)
+## 6. Deploy PHẦN 2 — Chrome Extension (đăng nhập trực tiếp trong popup, không cần cấu hình gì thêm)
 
-Extension **không tự đăng nhập Google riêng nữa** — khi học sinh bấm "Đăng nhập" trong popup, extension mở
-một tab tới web app; học sinh đăng nhập Google như bình thường ở đó; web app tự gửi phiên đăng nhập sang
-extension bằng `chrome.runtime.sendMessage` (cơ chế `externally_connectable` có sẵn của Chrome). Không cần
-tạo gì ở Google Cloud Console.
+Extension có form đăng nhập/đăng ký email+password **ngay trong popup của tiện ích** — không cần mở web
+app, không cần biết Extension ID, không cần khai `externally_connectable`. Mỗi học sinh "Load unpacked"
+ở máy nào cũng dùng được ngay, vì không còn phụ thuộc một ID cố định nào cả.
 
-1. Mở `extension/config.js`, sửa `APP_URL` thành đúng link GitHub Pages vừa deploy ở bước 4.
-2. Mở `extension/manifest.json`, sửa `externally_connectable.matches` thành đúng domain đó, ví dụ:
-   ```json
-   "externally_connectable": { "matches": ["https://tiepbuoc.github.io/*"] }
-   ```
-3. Vào `chrome://extensions`, bật **Developer mode**, bấm **Load unpacked**, chọn thư mục `extension/` →
-   Chrome cấp một **Extension ID** (chuỗi 32 ký tự) — copy lại.
-4. Mở `js/extension-bridge.js`, thay `POPAI_EXTENSION_ID` bằng Extension ID vừa copy.
-5. Upload lại `js/extension-bridge.js` lên GitHub Pages (bước 3 chỉ sửa file cục bộ, còn `manifest.json`
-   sửa xong thì vào `chrome://extensions` bấm **Reload** trên thẻ POP-AI Tracker để nạp lại).
-6. Thử: mở popup extension → tick đồng ý → bấm đăng nhập → đăng nhập Google ở tab vừa mở → quay lại mở
-   popup extension lần nữa, sẽ thấy đã đăng nhập.
+1. Mở `extension/config.js`, sửa `APP_URL` thành đúng link GitHub Pages vừa deploy ở bước 4 (chỉ dùng để
+   nút "Mở Đồng hồ tập trung" trong friction nudge mở đúng web app — không liên quan tới đăng nhập).
+2. Vào `chrome://extensions`, bật **Developer mode**, bấm **Load unpacked**, chọn thư mục `extension/`.
+3. Bấm biểu tượng tiện ích → tick đồng ý điều khoản → chọn tab **Đăng ký** (nếu học sinh cài extension
+   trước, chưa có tài khoản) hoặc **Đăng nhập** (nếu đã có tài khoản từ web app) → nhập email + mật khẩu
+   → bấm nút.
 
-> ⚠️ Lưu ý khi phân phối cho nhiều máy/nhiều học sinh: mỗi lần **Load unpacked** ở một đường dẫn thư mục
-> khác nhau, Chrome sẽ cấp **Extension ID khác nhau** — lúc đó `POPAI_EXTENSION_ID` bạn điền ở bước 4 sẽ
-> chỉ đúng với extension trên máy bạn. Có 2 cách xử lý:
-> - **Đơn giản nhất — đăng lên Chrome Web Store**: Store cấp ID cố định ngay khi tạo mục, ai cài từ Store
->   cũng dùng chung 1 ID, không phải làm lại bước 3-4.
-> - **Nếu chỉ phát file zip cho nhau, chưa muốn đăng Store**: thêm trường `"key"` (public key cố định)
->   vào `manifest.json` để mọi người Load unpacked cũng ra cùng 1 Extension ID — tạo bằng: `chrome://extensions`
->   → Pack extension → lấy file `.pem` → chạy `openssl rsa -in ten-file.pem -pubout -outform DER | openssl base64 -A`
->   → dán kết quả vào `"key"` trong manifest.json.
+Học sinh **dùng chung một email + mật khẩu** ở cả web app và extension để hai bên khớp cùng một tài
+khoản. Đăng ký ở web app trước rồi đăng nhập lại đúng email đó trong extension, hoặc ngược lại (đăng ký
+thẳng trong extension rồi đăng nhập lại đúng email đó trên web app để làm bài tự đánh giá, lập kế hoạch,
+tham gia lớp...) — tài khoản đăng ký trong extension mặc định là vai trò học sinh, chưa gán lớp; vào
+web app → **Cài đặt → Tham gia lớp** để nhập mã lớp sau.
 
 ## 7. Dùng thử
 
-1. Mở web app (link GitHub Pages) → đăng nhập Google (chọn "Tôi là học sinh").
-2. Cài extension, đăng nhập **bằng cùng tài khoản Google**, tick đồng ý điều khoản, bấm "Đăng nhập bằng
-   Google".
+1. Mở web app (link GitHub Pages) → tab **Đăng ký**, chọn "Tôi là học sinh" → nhập email + mật khẩu →
+   tạo tài khoản.
+2. Cài extension → tick đồng ý điều khoản → tab **Đăng nhập** → nhập **đúng email + mật khẩu vừa tạo ở
+   bước 1**.
 3. Mở một tab TikTok/YouTube Shorts, để nguyên vài phút (extension cập nhật mỗi 1 phút khi tab đang
    active).
 4. Quay lại web app → mục **Cài đặt** sẽ hiện "Đã kết nối", và màn hình **Hôm nay** sẽ hiện số phút đã
@@ -283,7 +273,7 @@ Không có bước cài đặt riêng — chỉ cần upload lại file lên Git
 
 ## Giới hạn cần biết
 
-- Vì web app và extension là hai phần triển khai độc lập, đổi domain GitHub Pages (đổi tên repo, chuyển sang tài khoản khác...) đòi hỏi cập nhật **hai chỗ thủ công**: Authorized domains trong Firebase Auth (bước 1.3) và `extension/config.js` (bước 6.1). Quên một trong hai sẽ không làm hỏng đồng bộ dữ liệu (vẫn qua Firestore bình thường), chỉ làm nút đăng nhập hoặc nút "Mở POP-AI" trỏ sai.
+- Vì web app và extension là hai phần triển khai độc lập, đổi domain GitHub Pages (đổi tên repo, chuyển sang tài khoản khác...) chỉ cần cập nhật `extension/config.js` (bước 6.1) — không còn phần Authorized domains/Extension ID nào phải sửa theo, vì đăng nhập email/password không phụ thuộc domain. Quên cập nhật `config.js` không làm hỏng đồng bộ dữ liệu (vẫn qua Firestore bình thường), chỉ làm nút "Mở Đồng hồ tập trung" trong friction nudge mở sai link.
 - Chỉ đo được hành vi trên **trình duyệt máy tính**, không đo được app điện thoại (do giới hạn hệ điều hành, xem phần trao đổi trước).
 - Nếu một học sinh dùng nhiều máy tính khác nhau, mỗi máy ghi đè dữ liệu "hôm nay" của máy đó — dữ liệu tổng hợp giữa nhiều thiết bị chưa được cộng dồn (đủ dùng cho quy mô lớp học/nghiên cứu nhỏ; muốn chính xác hơn cần chuyển sang cộng dồn qua Cloud Functions).
 - Trước khi phát hành rộng rãi (Chrome Web Store), cần thêm Privacy Policy công khai vì extension xin quyền `identity` + theo dõi hoạt động duyệt web.

@@ -1,5 +1,15 @@
-import { refreshIdToken, overwriteDocument, patchDocument, getDocument } from "./firebase-rest.js";
+import {
+  refreshIdToken, overwriteDocument, patchDocument, getDocument,
+  signInWithPassword, signUpWithPassword
+} from "./firebase-rest.js";
 import { APP_URL } from "./config.js";
+
+function genStudentCode() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let code = "HS-";
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
 
 const HEARTBEAT_ALARM = "pop-ai-heartbeat";
 const HEARTBEAT_MINUTES = 1; // Chrome không cho phép alarm lặp lại dưới 1 phút trong bản đóng gói chính thức
@@ -197,15 +207,86 @@ async function pushLiveStatus(session, status, match) {
   }
 }
 
+// ---------------------------------------------------------------
+// Đăng nhập/Đăng ký trực tiếp trong popup bằng email+password — không
+// còn phụ thuộc web app, externally_connectable hay POPAI_EXTENSION_ID.
+// ---------------------------------------------------------------
+function buildSession(authResult, consent) {
+  return {
+    uid: authResult.uid,
+    idToken: authResult.idToken,
+    refreshToken: authResult.refreshToken,
+    // Firebase ID token sống 1 giờ; trừ hao 5 phút để chủ động làm mới sớm.
+    expiresAt: Date.now() + 55 * 60 * 1000,
+    email: authResult.email || "",
+    displayName: "",
+    consentGiven: !!consent,
+    consentAt: Date.now()
+  };
+}
+
+async function createDefaultStudentDoc(session, email) {
+  // overwriteDocument (không dùng updateMask) thay toàn bộ nội dung document,
+  // nên trackerConnectedAt phải nằm chung trong lần ghi này, không patch riêng trước đó.
+  await overwriteDocument(session.idToken, `users/${session.uid}`, {
+    role: "student",
+    displayName: "",
+    email,
+    studentCode: genStudentCode(),
+    classId: null,
+    createdAt: new Date(),
+    trackerConnectedAt: new Date()
+  });
+}
+
+async function handleRegister(email, password, consent) {
+  const authResult = await signUpWithPassword(email, password);
+  let session = buildSession(authResult, consent);
+  await setAuthSession(session);
+  // Tài khoản Auth vừa tạo -> chưa có hồ sơ users/{uid}, tự tạo hồ sơ học sinh mặc định
+  // (giáo viên và tham gia lớp vẫn làm trên web app; ở đây chỉ phục vụ đăng ký nhanh
+  // để tiện ích có thể theo dõi ngay).
+  await createDefaultStudentDoc(session, email).catch((e) => console.warn("POP-AI: không tạo được hồ sơ học sinh.", e));
+  session = await refreshStudentMeta(session);
+  return session;
+}
+
+async function handleLogin(email, password, consent) {
+  const authResult = await signInWithPassword(email, password);
+  let session = buildSession(authResult, consent);
+  await setAuthSession(session);
+
+  // Nếu tài khoản Auth có sẵn nhưng chưa có hồ sơ users/{uid} (hiếm), tạo hồ sơ mặc định;
+  // nếu đã có hồ sơ (đăng ký từ web app hoặc lần trước), chỉ đánh dấu đã kết nối tiện ích.
+  const userDoc = await getDocument(session.idToken, `users/${session.uid}`).catch(() => null);
+  if (!userDoc) {
+    await createDefaultStudentDoc(session, email).catch(() => {});
+  } else {
+    await patchDocument(session.idToken, `users/${session.uid}`, { trackerConnectedAt: new Date() }, ["trackerConnectedAt"]).catch(() => {});
+  }
+  session = await refreshStudentMeta(session);
+  return session;
+}
+
 // ---- Nhắn tin từ popup ----
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
-    if (msg.type === "OPEN_LOGIN_PAGE") {
-      // Đăng nhập giờ thực hiện trên web app (đã đăng nhập Google ở đó), rồi web app
-      // tự gửi phiên đăng nhập sang đây qua onMessageExternal (xem bên dưới) — không
-      // cần chrome.identity / OAuth Client ID nữa.
-      chrome.tabs.create({ url: APP_URL });
-      sendResponse({ ok: true });
+    if (msg.type === "LOGIN") {
+      try {
+        const session = await handleLogin(msg.email, msg.password, msg.consent);
+        sendResponse({ ok: true, email: session.email });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message });
+      }
+    }
+
+    if (msg.type === "REGISTER") {
+      try {
+        const session = await handleRegister(msg.email, msg.password, msg.consent);
+        sendResponse({ ok: true, email: session.email });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message });
+      }
     }
 
     if (msg.type === "LOGOUT") {
@@ -224,38 +305,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         todayMinutes: Math.round(todaySeconds / 60),
         planTargetMin: session?.planTargetMin ?? null
       });
-    }
-  })();
-  return true; // giữ kênh mở cho sendResponse bất đồng bộ
-});
-
-// ---- Nhắn tin từ web app (POPAI_WEB_LOGIN) — thay thế cho chrome.identity/OAuth ----
-// Yêu cầu: manifest.json khai đúng domain web app ở "externally_connectable.matches".
-chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
-  (async () => {
-    if (msg?.type !== "POPAI_WEB_LOGIN") return;
-    if (!msg.idToken || !msg.refreshToken || !msg.uid) {
-      sendResponse({ ok: false, error: "Thiếu idToken/refreshToken/uid" });
-      return;
-    }
-    try {
-      let session = {
-        uid: msg.uid,
-        idToken: msg.idToken,
-        refreshToken: msg.refreshToken,
-        // Firebase ID token sống 1 giờ; trừ hao 5 phút để chủ động làm mới sớm.
-        expiresAt: Date.now() + 55 * 60 * 1000,
-        email: msg.email || "",
-        displayName: msg.displayName || "",
-        consentGiven: true,
-        consentAt: Date.now()
-      };
-      await setAuthSession(session);
-      await patchDocument(session.idToken, `users/${session.uid}`, { trackerConnectedAt: new Date() }, ["trackerConnectedAt"]).catch(() => {});
-      session = await refreshStudentMeta(session);
-      sendResponse({ ok: true, email: session.email, displayName: session.displayName });
-    } catch (e) {
-      sendResponse({ ok: false, error: e.message });
     }
   })();
   return true; // giữ kênh mở cho sendResponse bất đồng bộ

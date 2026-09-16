@@ -6,11 +6,9 @@
   "permissions": ["storage", "tabs", "idle", "alarms"],
   "host_permissions": [
     "https://securetoken.googleapis.com/*",
-    "https://firestore.googleapis.com/*"
+    "https://firestore.googleapis.com/*",
+    "https://identitytoolkit.googleapis.com/*"
   ],
-  "externally_connectable": {
-    "matches": ["https://tiepbuoc.github.io/*"]
-  },
   "background": {
     "service_worker": "background.js",
     "type": "module"

@@ -17,12 +17,14 @@ Hệ thống gồm 3 phần chạy song song và "nói chuyện" với nhau qua 
 
 ## 1. Đăng nhập (`index.html`)
 
-**Cách dùng:** Chọn vai trò "Tôi là học sinh" hoặc "Tôi là giáo viên" → (học sinh có thể nhập luôn mã lớp
-nếu giáo viên đã cho, giáo viên phải nhập mã xác thực) → bấm "Tiếp tục với Google".
+**Cách dùng:** Chọn tab "Đăng ký" (lần đầu) hoặc "Đăng nhập" (đã có tài khoản) → nếu đăng ký, chọn vai trò
+"Tôi là học sinh" hoặc "Tôi là giáo viên" (học sinh có thể nhập luôn mã lớp nếu giáo viên đã cho, giáo
+viên phải nhập mã xác thực) → nhập email + mật khẩu → bấm nút.
 
-**Tác dụng:** Xác thực bằng tài khoản Google (không cần đặt mật khẩu riêng), đồng thời xin sự đồng ý của
-người dùng về việc lưu dữ liệu tự đánh giá / nhật ký / thời gian xem video ngắn — nêu rõ dữ liệu phục vụ
-theo dõi cá nhân và nghiên cứu giáo dục, **không dùng để chẩn đoán y khoa**.
+**Tác dụng:** Xác thực bằng email + mật khẩu tự đặt (Firebase Authentication), đồng thời xin sự đồng ý
+của người dùng về việc lưu dữ liệu tự đánh giá / nhật ký / thời gian xem video ngắn — nêu rõ dữ liệu phục
+vụ theo dõi cá nhân và nghiên cứu giáo dục, **không dùng để chẩn đoán y khoa**. Dùng đúng một email/mật
+khẩu ở cả web app và Chrome Extension để dữ liệu hai bên khớp vào cùng một tài khoản.
 
 ---
 
@@ -126,7 +128,7 @@ sáng sớm xem sao") thay vì lời khuyên chung chung. Trợ lý được l�
 
 **Tính năng & tác dụng:**
 - **Trạng thái kết nối tiện ích trình duyệt** — cho biết Chrome Extension đã đồng bộ dữ liệu vào tài
-  khoản này chưa; nếu chưa, hướng dẫn cài đặt và đăng nhập cùng tài khoản Google.
+  khoản này chưa; nếu chưa, hướng dẫn cài đặt và đăng nhập cùng email + mật khẩu.
 - **Tham gia lớp** — nhập mã lớp giáo viên cung cấp để giáo viên nhìn thấy tiến trình của mình (ẩn danh
   qua mã học sinh).
 - **Mã học sinh của bạn** — mã định danh (VD: `HS-4K9P`) dùng thay tên thật khi hiển thị trên dashboard
@@ -153,8 +155,8 @@ chứng, không tự động thay đổi kế hoạch.
 
 ## 9. Chrome Extension (POP-AI Tracker)
 
-**Cách dùng:** Cài extension (Load unpacked hoặc từ Chrome Web Store) → đăng nhập **bằng cùng tài khoản
-Google** với web app → tick đồng ý điều khoản.
+**Cách dùng:** Cài extension (Load unpacked hoặc từ Chrome Web Store) → tick đồng ý điều khoản → đăng
+nhập/đăng ký ngay trong popup bằng **cùng email + mật khẩu** dùng ở web app.
 
 **Tính năng & tác dụng:**
 - **Đo tự động** thời gian xem trên các nền tảng video ngắn (YouTube Shorts, TikTok, Instagram/Facebook

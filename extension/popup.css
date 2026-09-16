@@ -22,3 +22,12 @@ body{
 .stat-num{font-family:'Fraunces',serif;font-size:1.8rem;color:#3E7C6B;}
 .stat-label{font-size:0.72rem;color:#5B6961;}
 .status{font-size:0.72rem;color:#B5533C;margin-top:10px;min-height:14px;}
+.auth-tab{display:flex;gap:6px;margin-bottom:12px;}
+.auth-tab button{flex:1;border:1px solid #DCE1D8;background:#fff;border-radius:999px;padding:6px 8px;font-size:0.76rem;font-weight:700;color:#5B6961;cursor:pointer;}
+.auth-tab button.active{background:#1F2A24;color:#fff;border-color:#1F2A24;}
+.field{margin-bottom:10px;}
+.field input[type=email],.field input[type=password]{
+  width:100%;padding:9px 11px;border:1px solid #DCE1D8;border-radius:8px;
+  font-family:inherit;font-size:0.82rem;background:#fff;color:#1F2A24;
+}
+.auth-error{color:#B5533C;font-size:0.72rem;margin-top:8px;min-height:1em;}

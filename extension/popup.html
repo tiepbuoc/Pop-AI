@@ -14,12 +14,27 @@
 
     <div id="loggedOutView">
       <p class="desc">Tự động ghi nhận thời gian bạn xem video ngắn (YouTube Shorts, TikTok, Instagram Reels, Facebook Reels) trên trình duyệt này, để đồng bộ với hồ sơ POP-AI của bạn.</p>
-      <label class="consent">
-        <input type="checkbox" id="consentBox">
-        <span>Tôi đồng ý cho POP-AI Tracker ghi nhận thời gian tôi xem video ngắn trên trình duyệt này để phục vụ theo dõi cá nhân / nghiên cứu giáo dục.</span>
-      </label>
-      <button id="loginBtn" class="btn" disabled>Đăng nhập (mở trang POP-AI)</button>
-      <p class="fine">Sẽ mở một tab mới để bạn đăng nhập bằng Google trên web POP-AI — đăng nhập xong, quay lại đây là được.</p>
+
+      <div class="auth-tab" id="authTab">
+        <button type="button" class="active" data-mode="login">Đăng nhập</button>
+        <button type="button" data-mode="register">Đăng ký</button>
+      </div>
+
+      <form id="authForm">
+        <div class="field">
+          <input type="email" id="email" placeholder="Email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <input type="password" id="password" placeholder="Mật khẩu (ít nhất 6 ký tự)" autocomplete="current-password" minlength="6" required>
+        </div>
+        <label class="consent">
+          <input type="checkbox" id="consentBox">
+          <span>Tôi đồng ý cho POP-AI Tracker ghi nhận thời gian tôi xem video ngắn trên trình duyệt này để phục vụ theo dõi cá nhân / nghiên cứu giáo dục.</span>
+        </label>
+        <button type="submit" id="submitBtn" class="btn" disabled>Đăng nhập</button>
+        <p class="auth-error" id="authError"></p>
+      </form>
+      <p class="fine">Đăng ký ở đây là tài khoản học sinh. Muốn tham gia lớp hoặc dùng vai trò giáo viên, vào trang web POP-AI và đăng nhập cùng email/mật khẩu này.</p>
     </div>
 
     <div id="loggedInView" style="display:none;">

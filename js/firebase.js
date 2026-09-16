@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  sendPasswordResetEmail, updateProfile, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query,
@@ -15,14 +16,30 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app); // Realtime Database — dùng cho lịch sử chat Trợ lý AI
-export const googleProvider = new GoogleAuthProvider();
 
 export {
-  signInWithPopup, signOut, onAuthStateChanged,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  sendPasswordResetEmail, updateProfile, signOut, onAuthStateChanged,
   doc, getDoc, setDoc, updateDoc, collection, addDoc, query,
   where, orderBy, limit, getDocs, serverTimestamp, onSnapshot,
   ref, push, get, rtdbQuery, limitToLast, rtdbServerTimestamp
 };
+
+// Dịch mã lỗi Firebase Auth sang tiếng Việt dễ hiểu cho người dùng cuối
+export function authErrorMessage(err) {
+  const code = err?.code || "";
+  const map = {
+    "auth/email-already-in-use": "Email này đã có tài khoản — hãy chọn \"Đăng nhập\" thay vì \"Đăng ký\".",
+    "auth/invalid-email": "Địa chỉ email không hợp lệ.",
+    "auth/weak-password": "Mật khẩu cần ít nhất 6 ký tự.",
+    "auth/wrong-password": "Sai mật khẩu.",
+    "auth/user-not-found": "Không tìm thấy tài khoản với email này — hãy chọn \"Đăng ký\" nếu chưa có tài khoản.",
+    "auth/invalid-credential": "Email hoặc mật khẩu không đúng.",
+    "auth/too-many-requests": "Bạn thử sai quá nhiều lần — vui lòng đợi một lát rồi thử lại.",
+    "auth/missing-password": "Vui lòng nhập mật khẩu."
+  };
+  return map[code] || (err?.message || "Có lỗi xảy ra, vui lòng thử lại.");
+}
 
 // ---- Helpers dùng chung ----
 export function todayKey(d = new Date()) {

@@ -1,10 +1,63 @@
 import { FIREBASE_API_KEY, FIREBASE_PROJECT_ID } from "./firebase-config.js";
 
 const TOKEN_BASE = "https://securetoken.googleapis.com/v1";
+const IDENTITY_BASE = "https://identitytoolkit.googleapis.com/v1";
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 
-// Đăng nhập giờ nhận idToken/refreshToken thẳng từ web app qua onMessageExternal
-// (xem extension/background.js) — không còn cần đổi access token của chrome.identity nữa.
+// Extension đăng nhập/đăng ký trực tiếp bằng email+password ngay trong popup,
+// gọi thẳng Identity Toolkit REST API — không còn phụ thuộc web app hay
+// externally_connectable/POPAI_EXTENSION_ID nữa.
+
+function mapAuthError(message) {
+  const map = {
+    EMAIL_EXISTS: "Email này đã có tài khoản — hãy chọn \"Đăng nhập\" thay vì \"Đăng ký\".",
+    EMAIL_NOT_FOUND: "Không tìm thấy tài khoản với email này — hãy chọn \"Đăng ký\" nếu chưa có tài khoản.",
+    INVALID_PASSWORD: "Sai mật khẩu.",
+    INVALID_LOGIN_CREDENTIALS: "Email hoặc mật khẩu không đúng.",
+    USER_DISABLED: "Tài khoản này đã bị vô hiệu hoá.",
+    TOO_MANY_ATTEMPTS_TRY_LATER: "Thử sai quá nhiều lần — vui lòng đợi một lát rồi thử lại.",
+    INVALID_EMAIL: "Địa chỉ email không hợp lệ."
+  };
+  const key = (message || "").split(" : ")[0].trim();
+  if (map[key]) return map[key];
+  if (key.startsWith("WEAK_PASSWORD")) return "Mật khẩu cần ít nhất 6 ký tự.";
+  return message || "Có lỗi xảy ra, vui lòng thử lại.";
+}
+
+function toSession(data) {
+  return {
+    idToken: data.idToken,
+    refreshToken: data.refreshToken,
+    expiresAt: Date.now() + Number(data.expiresIn) * 1000,
+    uid: data.localId,
+    email: data.email || ""
+  };
+}
+
+// Tạo tài khoản Firebase Auth mới bằng email/password (dùng khi học sinh cài
+// tiện ích trước, chưa từng có tài khoản trên web app).
+export async function signUpWithPassword(email, password) {
+  const res = await fetch(`${IDENTITY_BASE}/accounts:signUp?key=${FIREBASE_API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, returnSecureToken: true })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(mapAuthError(data.error.message));
+  return toSession(data);
+}
+
+// Đăng nhập bằng email/password đã có (dù tạo từ web app hay từ extension).
+export async function signInWithPassword(email, password) {
+  const res = await fetch(`${IDENTITY_BASE}/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, returnSecureToken: true })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(mapAuthError(data.error.message));
+  return toSession(data);
+}
 
 export async function refreshIdToken(refreshToken) {
   const res = await fetch(`${TOKEN_BASE}/token?key=${FIREBASE_API_KEY}`, {
