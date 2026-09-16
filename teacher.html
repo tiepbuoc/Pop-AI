@@ -9,13 +9,24 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jstat@1.9.6/dist/jstat.min.js"></script>
 </head>
-<body>
+<body class="has-mobile-topbar">
+
+<!-- Topbar (mobile) — mở/đóng thanh bên -->
+<header class="mobile-topbar">
+  <div class="brand">
+    <div class="brand-mark"><span></span></div>
+    <div class="brand-name">POP-AI</div>
+  </div>
+  <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Mở menu" aria-expanded="false">☰</button>
+</header>
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark"><span></span></div>
       <div class="brand-name">POP-AI</div>
+      <button class="sidebar-toggle-btn sidebar-close-btn" id="sidebarCloseBtn" aria-label="Đóng menu">✕</button>
     </div>
     <p class="tag">Không gian giáo viên</p>
     <div class="sidebar-footer">
@@ -97,5 +108,6 @@
 </div>
 
 <script type="module" src="js/teacher.js"></script>
+<script type="module" src="js/sidebar-toggle.js"></script>
 </body>
 </html>

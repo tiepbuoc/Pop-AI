@@ -8,14 +8,25 @@
 <link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
-<body>
+<body class="has-mobile-topbar">
+
+<!-- Topbar (mobile) — mở/đóng thanh bên -->
+<header class="mobile-topbar">
+  <div class="brand">
+    <div class="brand-mark"><span></span></div>
+    <div class="brand-name">POP-AI</div>
+  </div>
+  <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="Mở menu" aria-expanded="false">☰</button>
+</header>
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
 <div class="app-shell">
-  <!-- Sidebar (desktop) -->
+  <!-- Sidebar (desktop) / drawer (di động) -->
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark"><span></span></div>
       <div class="brand-name">POP-AI</div>
+      <button class="sidebar-toggle-btn sidebar-close-btn" id="sidebarCloseBtn" aria-label="Đóng menu">✕</button>
     </div>
     <nav class="nav" id="sideNav">
       <button class="nav-item active" data-page="today"><span class="nav-icon">◐</span> Hôm nay</button>
@@ -216,7 +227,19 @@
       <div class="card">
         <h3>Tiện ích trình duyệt (theo dõi tự động)</h3>
         <p class="muted">Trạng thái kết nối: <span id="trackerStatus" class="badge badge-mid">Chưa kết nối</span></p>
-        <p class="muted">Cài tiện ích POP-AI Tracker trên Chrome, đăng nhập bằng cùng tài khoản Google này và đồng ý điều khoản để dữ liệu thời gian xem video ngắn tự động đồng bộ vào mục "Hôm nay" và "Nhật ký".</p>
+        <p class="muted">Cài tiện ích POP-AI Tracker trên Chrome, đăng nhập bằng đúng email + mật khẩu bạn dùng ở web app này để dữ liệu thời gian xem video ngắn tự động đồng bộ vào mục "Hôm nay" và "Nhật ký".</p>
+        <a class="btn btn-accent section-gap" href="downloads/pop-ai-tracker-extension.zip" download>Tải tiện ích (.zip)</a>
+
+        <div class="divider"></div>
+        <h3>Cách cài đặt</h3>
+        <ol class="install-steps section-gap">
+          <li><span>Bấm nút <strong>Tải tiện ích (.zip)</strong> ở trên, sau đó giải nén file vừa tải (chuột phải vào file → <strong>Extract All</strong> / <strong>Giải nén tất cả</strong>).</span></li>
+          <li><span>Mở Chrome, dán vào thanh địa chỉ: <code>chrome://extensions</code> rồi bấm Enter.</span></li>
+          <li><span>Bật <strong>Developer mode</strong> (Chế độ nhà phát triển) ở góc trên bên phải trang.</span></li>
+          <li><span>Bấm <strong>Load unpacked</strong> (Tải tiện ích đã giải nén) → chọn đúng thư mục vừa giải nén ở bước 1 (thư mục chứa file <code>manifest.json</code>).</span></li>
+          <li><span>Tiện ích POP-AI Tracker sẽ xuất hiện trên thanh công cụ — bấm vào biểu tượng, tick đồng ý điều khoản, rồi đăng nhập/đăng ký bằng <strong>đúng email + mật khẩu</strong> đã dùng ở web app này.</span></li>
+        </ol>
+        <p class="muted section-gap">Chỉ dùng được trên máy tính (Chrome trên Windows/macOS/Linux) — tiện ích không cài được trên trình duyệt điện thoại.</p>
       </div>
       <div class="card section-gap">
         <h3>Lớp học</h3>
@@ -245,5 +268,6 @@
 
 <script type="module" src="js/student.js"></script>
 <script type="module" src="js/assistant.js"></script>
+<script type="module" src="js/sidebar-toggle.js"></script>
 </body>
 </html>

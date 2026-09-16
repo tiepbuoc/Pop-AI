@@ -156,6 +156,17 @@ thẳng trong extension rồi đăng nhập lại đúng email đó trên web ap
 tham gia lớp...) — tài khoản đăng ký trong extension mặc định là vai trò học sinh, chưa gán lớp; vào
 web app → **Cài đặt → Tham gia lớp** để nhập mã lớp sau.
 
+## 6.1. (Mới) Tải extension trực tiếp từ web app
+
+Trang **Cài đặt** của web app giờ có sẵn nút **Tải tiện ích (.zip)** kèm hướng dẫn 5 bước ngay trên
+giao diện — học sinh không cần biết Git/GitHub, chỉ cần tải, giải nén, rồi "Load unpacked" như bước 6 ở
+trên. File nén nằm ở `downloads/pop-ai-tracker-extension.zip`, được zip sẵn từ nội dung thư mục
+`extension/`.
+
+**Lưu ý khi cập nhật extension:** mỗi khi sửa file trong `extension/`, cần nén lại file zip này (ví dụ
+`cd extension && zip -r ../downloads/pop-ai-tracker-extension.zip . -x ".*"`) rồi upload đè lên GitHub —
+nếu không, nút tải trên trang Cài đặt sẽ đưa học sinh bản extension cũ.
+
 ## 7. Dùng thử
 
 1. Mở web app (link GitHub Pages) → tab **Đăng ký**, chọn "Tôi là học sinh" → nhập email + mật khẩu →
