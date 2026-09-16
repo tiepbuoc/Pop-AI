@@ -184,7 +184,7 @@ gọi LLM, lưu lịch sử chat) chạy thẳng trong trình duyệt, để đ�
 > (Cloud Function hoặc một proxy tương đương) trước khi công khai rộng rãi.
 
 1. Mở `js/assistant.js`, sửa hằng số `API_KEY` ở đầu file thành API key thật của bạn (và `API_URL`,
-   `MODEL` nếu dùng nhà cung cấp khác `api.shopaikey.com` / `gpt-5.4-nano`).
+   `MODEL` nếu dùng nhà cung cấp khác `api.shopaikey.com` / `gpt-5-mini`).
 2. Tạo **Realtime Database** trên Firebase Console (nếu chưa có — xem mục 5) rồi deploy rules:
    ```bash
    cd pop-ai/firebase

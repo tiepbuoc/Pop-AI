@@ -24,7 +24,7 @@ const POPAI_API_KEY = defineSecret("POPAI_API_KEY");
 // Cấu hình endpoint/model — có thể đổi nếu bạn dùng nhà cung cấp khác,
 // miễn là API tương thích chuẩn OpenAI Chat Completions.
 const API_URL = "https://api.shopaikey.com/v1/chat/completions";
-const MODEL = "gpt-5.4-nano";
+const MODEL = "gpt-5-mini";
 
 const MAX_HISTORY_MESSAGES = 12; // số lượt hội thoại gần nhất giữ lại làm ngữ cảnh
 const MAX_USER_MESSAGE_LEN = 1000;
