@@ -1,31 +1,10 @@
 import { FIREBASE_API_KEY, FIREBASE_PROJECT_ID } from "./firebase-config.js";
 
-const IDENTITY_BASE = "https://identitytoolkit.googleapis.com/v1";
 const TOKEN_BASE = "https://securetoken.googleapis.com/v1";
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
 
-// Đổi Google OAuth access token (từ chrome.identity) lấy Firebase ID token
-export async function signInWithGoogleAccessToken(accessToken) {
-  const res = await fetch(`${IDENTITY_BASE}/accounts:signInWithIdp?key=${FIREBASE_API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      postBody: `access_token=${accessToken}&providerId=google.com`,
-      requestUri: "https://pop-ai-extension.local",
-      returnSecureToken: true
-    })
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message || "Đăng nhập Firebase thất bại");
-  return {
-    uid: data.localId,
-    idToken: data.idToken,
-    refreshToken: data.refreshToken,
-    expiresAt: Date.now() + Number(data.expiresIn) * 1000,
-    email: data.email,
-    displayName: data.displayName || ""
-  };
-}
+// Đăng nhập giờ nhận idToken/refreshToken thẳng từ web app qua onMessageExternal
+// (xem extension/background.js) — không còn cần đổi access token của chrome.identity nữa.
 
 export async function refreshIdToken(refreshToken) {
   const res = await fetch(`${TOKEN_BASE}/token?key=${FIREBASE_API_KEY}`, {

@@ -20,7 +20,7 @@ import {
 // ---- Cấu hình LLM (test only — xem cảnh báo ở đầu file) ----
 const API_URL = "https://api.shopaikey.com/v1/chat/completions";
 const MODEL = "gpt-5-mini";
-const API_KEY = "sk-4150297863e3eee405805e8609648e6c5cebb1b502ffb46e"; // <-- thay bằng key thật để test
+const API_KEY = "sk-4150297863e3eee405805e8609648e6c5cebb1b502ffb46e"; // test only — nhớ thu hồi key này sau khi test xong
 
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_USER_MESSAGE_LEN = 1000;
@@ -178,7 +178,7 @@ async function sendChat() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${API_KEY}`
       },
-      body: JSON.stringify({ model: MODEL, messages, temperature: 0.7, max_tokens: 500 })
+      body: JSON.stringify({ model: MODEL, messages, temperature: 0.7, max_tokens: 1500 })
     });
 
     if (!res.ok) {
@@ -187,8 +187,22 @@ async function sendChat() {
       throw new Error(`HTTP ${res.status}`);
     }
     const data = await res.json();
-    const replyText = data.choices?.[0]?.message?.content?.trim();
-    if (!replyText) throw new Error("empty completion");
+    console.log("POP-AI LLM raw response:", JSON.stringify(data, null, 2)); // TODO: bỏ dòng này khi hết debug
+
+    const choice = data.choices?.[0];
+    const replyText =
+      choice?.message?.content?.trim() ||
+      choice?.text?.trim() || // vài API tương thích cũ trả về "text" thay vì "message.content"
+      "";
+
+    if (!replyText) {
+      console.error("POP-AI: completion rỗng. finish_reason =", choice?.finish_reason, "| full choice:", choice);
+      throw new Error(
+        choice?.finish_reason === "length"
+          ? "hết token trước khi trả lời xong (tăng max_tokens)"
+          : "empty completion"
+      );
+    }
 
     thinkingBubble.textContent = replyText;
 

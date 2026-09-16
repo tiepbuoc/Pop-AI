@@ -7,16 +7,8 @@ consentBox.addEventListener("change", () => {
 });
 
 loginBtn.addEventListener("click", () => {
-  loginBtn.disabled = true;
-  loginBtn.textContent = "Đang đăng nhập...";
-  chrome.runtime.sendMessage({ type: "LOGIN" }, (res) => {
-    if (res && res.ok) {
-      refreshView();
-    } else {
-      statusMsg.textContent = "Đăng nhập thất bại: " + (res?.error || "vui lòng thử lại.");
-      loginBtn.disabled = false;
-      loginBtn.textContent = "Đăng nhập bằng Google";
-    }
+  chrome.runtime.sendMessage({ type: "OPEN_LOGIN_PAGE" }, () => {
+    statusMsg.textContent = "Đã mở trang đăng nhập ở tab mới. Đăng nhập xong ở đó, rồi mở lại biểu tượng tiện ích này để tiếp tục.";
   });
 });
 

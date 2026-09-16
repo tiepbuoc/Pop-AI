@@ -3,12 +3,14 @@
   "name": "POP-AI Tracker",
   "version": "1.0.0",
   "description": "Tự động ghi nhận thời gian xem video ngắn (sau khi đăng nhập và đồng ý) để đồng bộ với nền tảng POP-AI.",
-  "permissions": ["identity", "storage", "tabs", "idle", "alarms"],
+  "permissions": ["storage", "tabs", "idle", "alarms"],
   "host_permissions": [
-    "https://identitytoolkit.googleapis.com/*",
     "https://securetoken.googleapis.com/*",
     "https://firestore.googleapis.com/*"
   ],
+  "externally_connectable": {
+    "matches": ["https://TEN-TAI-KHOAN.github.io/*"]
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -46,9 +48,5 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "oauth2": {
-    "client_id": "DIEN_OAUTH_CLIENT_ID_CUA_BAN.apps.googleusercontent.com",
-    "scopes": ["openid", "email", "profile"]
   }
 }

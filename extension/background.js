@@ -1,4 +1,4 @@
-import { signInWithGoogleAccessToken, refreshIdToken, overwriteDocument, patchDocument, getDocument } from "./firebase-rest.js";
+import { refreshIdToken, overwriteDocument, patchDocument, getDocument } from "./firebase-rest.js";
 import { APP_URL } from "./config.js";
 
 const HEARTBEAT_ALARM = "pop-ai-heartbeat";
@@ -200,33 +200,16 @@ async function pushLiveStatus(session, status, match) {
 // ---- Nhắn tin từ popup ----
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
-    if (msg.type === "LOGIN") {
-      try {
-        const accessToken = await new Promise((resolve, reject) => {
-          chrome.identity.getAuthToken({ interactive: true }, (token) => {
-            if (chrome.runtime.lastError || !token) reject(chrome.runtime.lastError || new Error("Không lấy được token"));
-            else resolve(token);
-          });
-        });
-        const fbSession = await signInWithGoogleAccessToken(accessToken);
-        let session = { ...fbSession, consentGiven: true, consentAt: Date.now() };
-        await setAuthSession(session);
-        await patchDocument(session.idToken, `users/${session.uid}`, { trackerConnectedAt: new Date() }, ["trackerConnectedAt"]).catch(() => {});
-        session = await refreshStudentMeta(session);
-        sendResponse({ ok: true, email: session.email, displayName: session.displayName });
-      } catch (e) {
-        sendResponse({ ok: false, error: e.message });
-      }
+    if (msg.type === "OPEN_LOGIN_PAGE") {
+      // Đăng nhập giờ thực hiện trên web app (đã đăng nhập Google ở đó), rồi web app
+      // tự gửi phiên đăng nhập sang đây qua onMessageExternal (xem bên dưới) — không
+      // cần chrome.identity / OAuth Client ID nữa.
+      chrome.tabs.create({ url: APP_URL });
+      sendResponse({ ok: true });
     }
 
     if (msg.type === "LOGOUT") {
-      const session = await getAuthSession();
       await clearAuthSession();
-      if (session) {
-        chrome.identity.getAuthToken({ interactive: false }, (token) => {
-          if (token) chrome.identity.removeCachedAuthToken({ token });
-        });
-      }
       sendResponse({ ok: true });
     }
 
@@ -241,6 +224,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         todayMinutes: Math.round(todaySeconds / 60),
         planTargetMin: session?.planTargetMin ?? null
       });
+    }
+  })();
+  return true; // giữ kênh mở cho sendResponse bất đồng bộ
+});
+
+// ---- Nhắn tin từ web app (POPAI_WEB_LOGIN) — thay thế cho chrome.identity/OAuth ----
+// Yêu cầu: manifest.json khai đúng domain web app ở "externally_connectable.matches".
+chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
+  (async () => {
+    if (msg?.type !== "POPAI_WEB_LOGIN") return;
+    if (!msg.idToken || !msg.refreshToken || !msg.uid) {
+      sendResponse({ ok: false, error: "Thiếu idToken/refreshToken/uid" });
+      return;
+    }
+    try {
+      let session = {
+        uid: msg.uid,
+        idToken: msg.idToken,
+        refreshToken: msg.refreshToken,
+        // Firebase ID token sống 1 giờ; trừ hao 5 phút để chủ động làm mới sớm.
+        expiresAt: Date.now() + 55 * 60 * 1000,
+        email: msg.email || "",
+        displayName: msg.displayName || "",
+        consentGiven: true,
+        consentAt: Date.now()
+      };
+      await setAuthSession(session);
+      await patchDocument(session.idToken, `users/${session.uid}`, { trackerConnectedAt: new Date() }, ["trackerConnectedAt"]).catch(() => {});
+      session = await refreshStudentMeta(session);
+      sendResponse({ ok: true, email: session.email, displayName: session.displayName });
+    } catch (e) {
+      sendResponse({ ok: false, error: e.message });
     }
   })();
   return true; // giữ kênh mở cho sendResponse bất đồng bộ

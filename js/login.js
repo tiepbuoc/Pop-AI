@@ -3,6 +3,7 @@ import {
   collection, query, where, getDocs, serverTimestamp, genStudentCode,
   toast, onAuthStateChanged
 } from "./firebase.js";
+import { notifyExtensionLogin } from "./extension-bridge.js";
 
 let selectedRole = "student";
 
@@ -35,6 +36,7 @@ document.getElementById("googleBtn").addEventListener("click", async () => {
     const existing = await getDoc(userRef);
 
     if (existing.exists()) {
+      if (existing.data().role === "student") notifyExtensionLogin(user);
       redirectByRole(existing.data().role);
       return;
     }
@@ -84,6 +86,7 @@ document.getElementById("googleBtn").addEventListener("click", async () => {
       });
     }
 
+    notifyExtensionLogin(user);
     redirectByRole("student");
   } catch (err) {
     console.error(err);

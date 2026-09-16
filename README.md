@@ -137,28 +137,35 @@ firebase deploy --only database
 Vào **Build → Realtime Database** trên Firebase Console → **Create database** (nếu chưa có) trước khi
 deploy rules ở trên — `databaseURL` đã có sẵn trong `firebase-config.js`.
 
-## 6. Deploy PHẦN 2 — Chrome Extension + tạo OAuth Client ID
+## 6. Deploy PHẦN 2 — Chrome Extension (đăng nhập qua web app, không cần OAuth Client ID)
 
-Extension cần một OAuth Client ID riêng (loại **Chrome Extension**) để `chrome.identity` hoạt động —
-đây là bước tách biệt hoàn toàn với việc deploy web app ở trên:
+Extension **không tự đăng nhập Google riêng nữa** — khi học sinh bấm "Đăng nhập" trong popup, extension mở
+một tab tới web app; học sinh đăng nhập Google như bình thường ở đó; web app tự gửi phiên đăng nhập sang
+extension bằng `chrome.runtime.sendMessage` (cơ chế `externally_connectable` có sẵn của Chrome). Không cần
+tạo gì ở Google Cloud Console.
 
-1. Mở `extension/config.js`, sửa `APP_URL` thành đúng link GitHub Pages vừa deploy ở bước 4 (dùng cho nút
-   "Mở POP-AI" trong popup của extension — chỉ là một liên kết, không ảnh hưởng tới đồng bộ dữ liệu).
-2. Vào https://console.cloud.google.com/apis/credentials (chọn đúng project Firebase ở trên, vì Firebase
-   project = GCP project).
-3. **Create credentials → OAuth client ID → Application type: Chrome Extension**.
-4. Trước tiên cần **Extension ID**: mở `chrome://extensions`, bật **Developer mode**, bấm **Load
-   unpacked**, chọn thư mục `extension/` → Chrome sẽ cấp một Extension ID (chuỗi 32 ký tự). Copy ID này.
-5. Quay lại Google Cloud Console, dán Extension ID vào ô yêu cầu, tạo client → copy **Client ID**.
-6. Mở `extension/manifest.json`, thay:
+1. Mở `extension/config.js`, sửa `APP_URL` thành đúng link GitHub Pages vừa deploy ở bước 4.
+2. Mở `extension/manifest.json`, sửa `externally_connectable.matches` thành đúng domain đó, ví dụ:
    ```json
-   "oauth2": { "client_id": "CLIENT_ID_VUA_TAO.apps.googleusercontent.com", ... }
+   "externally_connectable": { "matches": ["https://ten-tai-khoan.github.io/*"] }
    ```
-7. Vào `chrome://extensions`, bấm **Reload** trên extension POP-AI Tracker.
+3. Vào `chrome://extensions`, bật **Developer mode**, bấm **Load unpacked**, chọn thư mục `extension/` →
+   Chrome cấp một **Extension ID** (chuỗi 32 ký tự) — copy lại.
+4. Mở `js/extension-bridge.js`, thay `POPAI_EXTENSION_ID` bằng Extension ID vừa copy.
+5. Upload lại `js/extension-bridge.js` lên GitHub Pages (bước 3 chỉ sửa file cục bộ, còn `manifest.json`
+   sửa xong thì vào `chrome://extensions` bấm **Reload** trên thẻ POP-AI Tracker để nạp lại).
+6. Thử: mở popup extension → tick đồng ý → bấm đăng nhập → đăng nhập Google ở tab vừa mở → quay lại mở
+   popup extension lần nữa, sẽ thấy đã đăng nhập.
 
-Muốn phân phối cho nhiều học sinh mà không bắt từng em bật Developer mode + Load unpacked: nén thư mục
-`extension/` rồi đăng lên **Chrome Web Store** (cần tài khoản nhà phát triển, phí một lần ~$5) — khi đó
-Extension ID cố định ngay từ lúc tạo mục trên Store, tạo OAuth Client ID theo ID đó trước khi publish.
+> ⚠️ Lưu ý khi phân phối cho nhiều máy/nhiều học sinh: mỗi lần **Load unpacked** ở một đường dẫn thư mục
+> khác nhau, Chrome sẽ cấp **Extension ID khác nhau** — lúc đó `POPAI_EXTENSION_ID` bạn điền ở bước 4 sẽ
+> chỉ đúng với extension trên máy bạn. Có 2 cách xử lý:
+> - **Đơn giản nhất — đăng lên Chrome Web Store**: Store cấp ID cố định ngay khi tạo mục, ai cài từ Store
+>   cũng dùng chung 1 ID, không phải làm lại bước 3-4.
+> - **Nếu chỉ phát file zip cho nhau, chưa muốn đăng Store**: thêm trường `"key"` (public key cố định)
+>   vào `manifest.json` để mọi người Load unpacked cũng ra cùng 1 Extension ID — tạo bằng: `chrome://extensions`
+>   → Pack extension → lấy file `.pem` → chạy `openssl rsa -in ten-file.pem -pubout -outform DER | openssl base64 -A`
+>   → dán kết quả vào `"key"` trong manifest.json.
 
 ## 7. Dùng thử
 
@@ -184,7 +191,7 @@ gọi LLM, lưu lịch sử chat) chạy thẳng trong trình duyệt, để đ�
 > (Cloud Function hoặc một proxy tương đương) trước khi công khai rộng rãi.
 
 1. Mở `js/assistant.js`, sửa hằng số `API_KEY` ở đầu file thành API key thật của bạn (và `API_URL`,
-   `MODEL` nếu dùng nhà cung cấp khác `api.shopaikey.com` / `gpt-5-mini`).
+   `MODEL` nếu dùng nhà cung cấp khác `api.shopaikey.com` / `gpt-5.4-nano`).
 2. Tạo **Realtime Database** trên Firebase Console (nếu chưa có — xem mục 5) rồi deploy rules:
    ```bash
    cd pop-ai/firebase
