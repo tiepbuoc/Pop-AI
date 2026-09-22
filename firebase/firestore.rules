@@ -7,11 +7,21 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
-    // Mã xác thực giáo viên — cho phép đọc để kiểm tra khi đăng ký,
-    // KHÔNG cho phép client ghi (thiết lập thủ công trong Firebase Console)
+    // Mã xác thực giáo viên — kiểu cũ (1 mã duy nhất, giữ để tương thích ngược).
+    // Ghi: chỉ cần đã đăng nhập (kể cả ẩn danh — admin.html dùng đăng nhập ẩn danh sau khi
+    // qua được lớp mật khẩu ở phía client). LƯU Ý: đây KHÔNG phải bảo mật thật — mật khẩu
+    // nằm trong mã nguồn client (site tĩnh), ai đọc được JS và tự gọi Firebase SDK vẫn ghi
+    // được thẳng vào đây mà không cần qua form. Chỉ nên coi là khoá chống lỡ tay/tò mò.
     match /config/{doc} {
       allow read: if request.auth != null;
-      allow write: if false;
+      allow write: if request.auth != null;
+    }
+
+    // Nhiều mã xác thực giáo viên cùng hiệu lực (mỗi document = 1 mã, có thể gắn nhãn
+    // trường/lớp riêng) — quản lý qua admin.html. Cùng mức bảo vệ như config/ ở trên.
+    match /teacherAccessCodes/{codeId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
 
     // Lớp học — giáo viên tạo/sửa lớp của mình; học sinh cần đọc để tra mã tham gia

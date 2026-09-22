@@ -5,7 +5,7 @@ import {
   signInAnonymously
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query,
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc, query,
   where, orderBy, limit, getDocs, serverTimestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -22,7 +22,7 @@ export {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendPasswordResetEmail, updateProfile, signOut, onAuthStateChanged,
   signInAnonymously,
-  doc, getDoc, setDoc, updateDoc, collection, addDoc, query,
+  doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc, query,
   where, orderBy, limit, getDocs, serverTimestamp, onSnapshot,
   ref, push, get, rtdbQuery, limitToLast, rtdbServerTimestamp
 };

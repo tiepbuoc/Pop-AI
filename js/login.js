@@ -177,9 +177,14 @@ async function handleLogin(email, password) {
 async function verifyTeacherCode(code) {
   if (!code) return false;
   try {
-    const snap = await getDoc(doc(db, "config", "teacherAccess"));
-    if (!snap.exists()) return false;
-    return snap.data().code === code;
+    // Mã kiểu cũ (1 mã duy nhất, đặt tay ở Firestore config/teacherAccess) — giữ để tương thích ngược
+    const legacySnap = await getDoc(doc(db, "config", "teacherAccess"));
+    if (legacySnap.exists() && legacySnap.data().code === code) return true;
+
+    // Nhiều mã cùng hiệu lực, quản lý qua admin.html
+    const q = query(collection(db, "teacherAccessCodes"), where("code", "==", code));
+    const res = await getDocs(q);
+    return !res.empty;
   } catch {
     return false;
   }

@@ -11,7 +11,7 @@
 <body>
 
 <div class="login-screen">
-  <div class="card login-card" id="adminCard">
+  <div class="card login-card" id="adminCard" style="max-width:480px;">
 
     <!-- Trạng thái: nhập mật khẩu -->
     <div id="passwordState">
@@ -33,18 +33,26 @@
     <div id="adminState" style="display:none;">
       <div class="login-mark"><span></span></div>
       <h1>POP-AI — Quản trị</h1>
-      <p class="section-gap">Quản lý mã xác thực giáo viên — mã này giáo viên mới cần nhập khi đăng ký tài khoản để được cấp vai trò "giáo viên".</p>
+      <p class="section-gap">Danh sách mã xác thực giáo viên — mỗi mã có thể gắn nhãn riêng (VD: tên trường/lớp) và đều dùng đăng ký được cùng lúc. Xoá một mã sẽ khiến mã đó không đăng ký được nữa (không ảnh hưởng giáo viên đã đăng ký trước đó).</p>
 
       <div class="field section-gap">
-        <label>Mã hiện tại</label>
-        <div class="admin-code-row">
-          <code id="currentCode">—</code>
-          <button type="button" class="btn btn-ghost btn-sm" id="copyCodeBtn">Sao chép</button>
-        </div>
-        <p class="muted" id="currentCodeMeta"></p>
+        <label>Các mã đang hiệu lực</label>
+        <div id="codesList"><p class="muted">Đang tải…</p></div>
       </div>
 
-      <form id="adminForm">
+      <div class="field section-gap" id="legacyCodeBlock" style="display:none;">
+        <label>Mã kiểu cũ (đặt thủ công qua Firebase Console, vẫn còn hiệu lực)</label>
+        <div class="admin-code-row">
+          <code id="legacyCode">—</code>
+          <button type="button" class="btn btn-ghost btn-sm admin-danger-btn" id="deleteLegacyBtn">Xoá</button>
+        </div>
+      </div>
+
+      <form id="addForm">
+        <div class="field section-gap">
+          <label for="newLabel">Nhãn (tuỳ chọn — VD: Trường A, Lớp 10A1)</label>
+          <input type="text" id="newLabel" placeholder="Để trống nếu không cần phân biệt" autocomplete="off">
+        </div>
         <div class="field section-gap">
           <label for="newCode">Mã mới</label>
           <input type="text" id="newCode" placeholder="VD: GV2026-POPAI" autocomplete="off" required minlength="4">
@@ -54,7 +62,7 @@
           <button type="button" class="btn btn-ghost btn-sm" id="genCodeBtn">Tạo ngẫu nhiên</button>
         </div>
 
-        <button type="submit" class="auth-submit-btn section-gap" id="saveBtn">Lưu mã mới</button>
+        <button type="submit" class="auth-submit-btn section-gap" id="addBtn">Thêm mã</button>
         <p class="auth-error" id="adminError"></p>
         <p class="auth-ok" id="adminOk"></p>
       </form>

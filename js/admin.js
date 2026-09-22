@@ -1,6 +1,6 @@
 import {
-  auth, db, doc, getDoc, setDoc, serverTimestamp, signOut,
-  signInAnonymously, toast
+  auth, db, doc, getDoc, deleteDoc, collection, addDoc, getDocs, orderBy, query,
+  serverTimestamp, signOut, signInAnonymously, toast
 } from "./firebase.js";
 
 // Mật khẩu quản trị — LƯU Ý: nằm trong mã nguồn client (site tĩnh, không có backend
@@ -15,18 +15,22 @@ const adminPassword = document.getElementById("adminPassword");
 const passwordError = document.getElementById("passwordError");
 const unlockBtn = document.getElementById("unlockBtn");
 
-const currentCode = document.getElementById("currentCode");
-const currentCodeMeta = document.getElementById("currentCodeMeta");
-const copyCodeBtn = document.getElementById("copyCodeBtn");
-const adminForm = document.getElementById("adminForm");
+const codesList = document.getElementById("codesList");
+const legacyCodeBlock = document.getElementById("legacyCodeBlock");
+const legacyCode = document.getElementById("legacyCode");
+const deleteLegacyBtn = document.getElementById("deleteLegacyBtn");
+
+const addForm = document.getElementById("addForm");
+const newLabel = document.getElementById("newLabel");
 const newCodeInput = document.getElementById("newCode");
 const genCodeBtn = document.getElementById("genCodeBtn");
-const saveBtn = document.getElementById("saveBtn");
+const addBtn = document.getElementById("addBtn");
 const adminError = document.getElementById("adminError");
 const adminOk = document.getElementById("adminOk");
 const lockBtn = document.getElementById("lockBtn");
 
-const TEACHER_ACCESS_REF = () => doc(db, "config", "teacherAccess");
+const CODES_COLLECTION = () => collection(db, "teacherAccessCodes");
+const LEGACY_REF = () => doc(db, "config", "teacherAccess");
 
 function showAdmin() {
   passwordState.style.display = "none";
@@ -50,11 +54,10 @@ passwordForm.addEventListener("submit", async (e) => {
 
   unlockBtn.disabled = true;
   try {
-    // Cần một phiên đăng nhập (kể cả ẩn danh) để thoả điều kiện Firestore rules.
     if (!auth.currentUser) {
       await signInAnonymously(auth);
     }
-    await loadCurrentCode();
+    await loadAll();
     showAdmin();
   } catch (err) {
     console.error(err);
@@ -65,28 +68,92 @@ passwordForm.addEventListener("submit", async (e) => {
   }
 });
 
-async function loadCurrentCode() {
-  const snap = await getDoc(TEACHER_ACCESS_REF());
-  if (snap.exists() && snap.data().code) {
-    currentCode.textContent = snap.data().code;
-    const updatedAt = snap.data().updatedAt?.toDate?.();
-    currentCodeMeta.textContent = updatedAt
-      ? `Cập nhật lần cuối: ${updatedAt.toLocaleString("vi-VN")}`
-      : "";
-  } else {
-    currentCode.textContent = "(chưa đặt)";
-    currentCodeMeta.textContent = "Chưa có mã nào — nhập mã mới bên dưới để tạo lần đầu.";
+async function loadAll() {
+  await Promise.all([loadCodes(), loadLegacy()]);
+}
+
+async function loadCodes() {
+  codesList.innerHTML = `<p class="muted">Đang tải…</p>`;
+  try {
+    const q = query(CODES_COLLECTION(), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      codesList.innerHTML = `<p class="muted">Chưa có mã nào — thêm mã đầu tiên bên dưới.</p>`;
+      return;
+    }
+
+    codesList.innerHTML = "";
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      const row = document.createElement("div");
+      row.className = "admin-code-row";
+      const createdAt = data.createdAt?.toDate?.();
+      const meta = [
+        data.label ? data.label : null,
+        createdAt ? createdAt.toLocaleDateString("vi-VN") : null
+      ].filter(Boolean).join(" · ");
+
+      row.innerHTML = `
+        <div style="flex:1;min-width:0;">
+          <code>${escapeHtml(data.code)}</code>
+          ${meta ? `<div class="muted" style="margin-top:2px;">${escapeHtml(meta)}</div>` : ""}
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm admin-copy-btn" data-code="${escapeHtml(data.code)}">Sao chép</button>
+        <button type="button" class="btn btn-ghost btn-sm admin-danger-btn" data-id="${docSnap.id}">Xoá</button>
+      `;
+      codesList.appendChild(row);
+    });
+
+    codesList.querySelectorAll(".admin-copy-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(btn.dataset.code);
+          toast("Đã sao chép mã.");
+        } catch {
+          toast("Không sao chép được — hãy chọn và copy thủ công.");
+        }
+      });
+    });
+
+    codesList.querySelectorAll(".admin-danger-btn[data-id]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Xoá mã này? Mã sẽ không đăng ký được nữa.")) return;
+        try {
+          await deleteDoc(doc(db, "teacherAccessCodes", btn.dataset.id));
+          toast("Đã xoá mã.");
+          await loadCodes();
+        } catch (err) {
+          console.error(err);
+          toast("Xoá thất bại.");
+        }
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    codesList.innerHTML = `<p class="muted">Không tải được danh sách mã.</p>`;
   }
 }
 
-copyCodeBtn.addEventListener("click", async () => {
-  const text = currentCode.textContent.trim();
-  if (!text || text === "—" || text === "(chưa đặt)") return;
+async function loadLegacy() {
+  const snap = await getDoc(LEGACY_REF());
+  if (snap.exists() && snap.data().code) {
+    legacyCode.textContent = snap.data().code;
+    legacyCodeBlock.style.display = "block";
+  } else {
+    legacyCodeBlock.style.display = "none";
+  }
+}
+
+deleteLegacyBtn.addEventListener("click", async () => {
+  if (!confirm("Xoá mã kiểu cũ này? Mã sẽ không đăng ký được nữa.")) return;
   try {
-    await navigator.clipboard.writeText(text);
-    toast("Đã sao chép mã.");
-  } catch {
-    toast("Không sao chép được — hãy chọn và copy thủ công.");
+    await deleteDoc(LEGACY_REF());
+    toast("Đã xoá mã kiểu cũ.");
+    await loadLegacy();
+  } catch (err) {
+    console.error(err);
+    toast("Xoá thất bại.");
   }
 });
 
@@ -98,32 +165,35 @@ genCodeBtn.addEventListener("click", () => {
   newCodeInput.value = `GV${year}-${suffix}`;
 });
 
-adminForm.addEventListener("submit", async (e) => {
+addForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   adminError.textContent = "";
   adminOk.textContent = "";
 
   const code = newCodeInput.value.trim();
+  const label = newLabel.value.trim();
   if (!code) {
-    adminError.textContent = "Vui lòng nhập mã mới.";
+    adminError.textContent = "Vui lòng nhập mã.";
     return;
   }
 
-  saveBtn.disabled = true;
+  addBtn.disabled = true;
   try {
-    await setDoc(TEACHER_ACCESS_REF(), {
+    await addDoc(CODES_COLLECTION(), {
       code,
-      updatedAt: serverTimestamp()
+      label: label || null,
+      createdAt: serverTimestamp()
     });
-    adminOk.textContent = "Đã lưu mã mới thành công.";
+    adminOk.textContent = "Đã thêm mã mới.";
     newCodeInput.value = "";
-    await loadCurrentCode();
-    toast("Đã cập nhật mã xác thực giáo viên.");
+    newLabel.value = "";
+    await loadCodes();
+    toast("Đã thêm mã xác thực giáo viên.");
   } catch (err) {
     console.error(err);
-    adminError.textContent = "Lưu thất bại — kiểm tra lại firestore.rules đã cho phép ghi vào config/teacherAccess chưa.";
+    adminError.textContent = "Thêm thất bại — kiểm tra lại firestore.rules đã cho phép ghi vào teacherAccessCodes chưa.";
   } finally {
-    saveBtn.disabled = false;
+    addBtn.disabled = false;
   }
 });
 
@@ -131,3 +201,11 @@ lockBtn.addEventListener("click", async () => {
   await signOut(auth);
   showPassword();
 });
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

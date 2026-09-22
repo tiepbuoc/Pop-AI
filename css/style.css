@@ -349,3 +349,6 @@ tr:last-child td{border-bottom:none;}
   font-family:'Manrope',monospace;font-weight:700;font-size:1rem;
   flex:1;overflow-wrap:anywhere;
 }
+.admin-danger-btn{color:var(--risk);border-color:var(--risk-soft);flex-shrink:0;}
+.admin-danger-btn:hover{background:var(--risk-soft);}
+.admin-copy-btn{flex-shrink:0;}
