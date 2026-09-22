@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  sendPasswordResetEmail, updateProfile, signOut, onAuthStateChanged
+  sendPasswordResetEmail, updateProfile, signOut, onAuthStateChanged,
+  signInAnonymously
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query,
@@ -20,6 +21,7 @@ export const rtdb = getDatabase(app); // Realtime Database — dùng cho lịch 
 export {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendPasswordResetEmail, updateProfile, signOut, onAuthStateChanged,
+  signInAnonymously,
   doc, getDoc, setDoc, updateDoc, collection, addDoc, query,
   where, orderBy, limit, getDocs, serverTimestamp, onSnapshot,
   ref, push, get, rtdbQuery, limitToLast, rtdbServerTimestamp
