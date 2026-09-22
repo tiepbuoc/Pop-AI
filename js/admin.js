@@ -1,11 +1,19 @@
 import {
   auth, db, doc, getDoc, setDoc, serverTimestamp, signOut,
-  onAuthStateChanged, toast
+  signInAnonymously, toast
 } from "./firebase.js";
 
-const checkingState = document.getElementById("checkingState");
-const deniedState = document.getElementById("deniedState");
+// Mật khẩu quản trị — LƯU Ý: nằm trong mã nguồn client (site tĩnh, không có backend
+// riêng), nên đây chỉ là khoá chống lỡ tay/tò mò, KHÔNG phải bảo mật thật. Ai xem được
+// file này (View Source / DevTools) đều đọc được mật khẩu.
+const ADMIN_PASSWORD = "nhat1234";
+
+const passwordState = document.getElementById("passwordState");
 const adminState = document.getElementById("adminState");
+const passwordForm = document.getElementById("passwordForm");
+const adminPassword = document.getElementById("adminPassword");
+const passwordError = document.getElementById("passwordError");
+const unlockBtn = document.getElementById("unlockBtn");
 
 const currentCode = document.getElementById("currentCode");
 const currentCodeMeta = document.getElementById("currentCodeMeta");
@@ -16,41 +24,44 @@ const genCodeBtn = document.getElementById("genCodeBtn");
 const saveBtn = document.getElementById("saveBtn");
 const adminError = document.getElementById("adminError");
 const adminOk = document.getElementById("adminOk");
-const logoutBtn = document.getElementById("logoutBtn");
+const lockBtn = document.getElementById("lockBtn");
 
 const TEACHER_ACCESS_REF = () => doc(db, "config", "teacherAccess");
 
-function showOnly(el) {
-  [checkingState, deniedState, adminState].forEach(s => s.style.display = "none");
-  el.style.display = "block";
+function showAdmin() {
+  passwordState.style.display = "none";
+  adminState.style.display = "block";
+}
+function showPassword() {
+  adminState.style.display = "none";
+  passwordState.style.display = "block";
+  adminPassword.value = "";
+  adminPassword.focus();
 }
 
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    deniedState.querySelector("p").textContent =
-      "Bạn cần đăng nhập bằng một tài khoản giáo viên trước khi vào trang này.";
-    showOnly(deniedState);
+passwordForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  passwordError.textContent = "";
+
+  if (adminPassword.value !== ADMIN_PASSWORD) {
+    passwordError.textContent = "Sai mật khẩu.";
     return;
   }
 
+  unlockBtn.disabled = true;
   try {
-    const userSnap = await getDoc(doc(db, "users", user.uid));
-    const role = userSnap.exists() ? userSnap.data().role : null;
-
-    if (role !== "teacher") {
-      deniedState.querySelector("p").textContent =
-        "Trang này chỉ dành cho tài khoản có vai trò giáo viên. Tài khoản hiện tại không có quyền này.";
-      showOnly(deniedState);
-      return;
+    // Cần một phiên đăng nhập (kể cả ẩn danh) để thoả điều kiện Firestore rules.
+    if (!auth.currentUser) {
+      await signInAnonymously(auth);
     }
-
     await loadCurrentCode();
-    showOnly(adminState);
+    showAdmin();
   } catch (err) {
     console.error(err);
-    deniedState.querySelector("p").textContent =
-      "Không kiểm tra được quyền truy cập — vui lòng thử tải lại trang.";
-    showOnly(deniedState);
+    passwordError.textContent =
+      "Không đăng nhập được — kiểm tra đã bật \"Anonymous\" ở Firebase Console → Authentication → Sign-in method chưa.";
+  } finally {
+    unlockBtn.disabled = false;
   }
 });
 
@@ -102,8 +113,7 @@ adminForm.addEventListener("submit", async (e) => {
   try {
     await setDoc(TEACHER_ACCESS_REF(), {
       code,
-      updatedAt: serverTimestamp(),
-      updatedBy: auth.currentUser?.uid || null
+      updatedAt: serverTimestamp()
     });
     adminOk.textContent = "Đã lưu mã mới thành công.";
     newCodeInput.value = "";
@@ -111,13 +121,13 @@ adminForm.addEventListener("submit", async (e) => {
     toast("Đã cập nhật mã xác thực giáo viên.");
   } catch (err) {
     console.error(err);
-    adminError.textContent = "Lưu thất bại — kiểm tra lại firestore.rules đã cho phép giáo viên ghi vào config/teacherAccess chưa.";
+    adminError.textContent = "Lưu thất bại — kiểm tra lại firestore.rules đã cho phép ghi vào config/teacherAccess chưa.";
   } finally {
     saveBtn.disabled = false;
   }
 });
 
-logoutBtn.addEventListener("click", async () => {
+lockBtn.addEventListener("click", async () => {
   await signOut(auth);
-  window.location.href = "index.html";
+  showPassword();
 });
