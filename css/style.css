@@ -337,3 +337,15 @@ tr:last-child td{border-bottom:none;}
   font-size:0.8rem;color:var(--ink-soft);margin-top:10px;
   padding-left:14px;border-left:2px solid var(--line);
 }
+
+/* ---------- Trang quản trị (admin.html) ---------- */
+.auth-ok{color:var(--focus);font-size:0.82rem;margin-top:10px;min-height:1.1em;text-align:left;}
+.admin-code-row{
+  display:flex;align-items:center;gap:10px;
+  background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-s);
+  padding:10px 14px;margin-top:6px;
+}
+.admin-code-row code{
+  font-family:'Manrope',monospace;font-weight:700;font-size:1rem;
+  flex:1;overflow-wrap:anywhere;
+}
