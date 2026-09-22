@@ -13,19 +13,20 @@
 <div class="login-screen">
   <div class="card login-card" id="adminCard">
 
-    <!-- Trạng thái: đang kiểm tra đăng nhập -->
-    <div id="checkingState">
+    <!-- Trạng thái: nhập mật khẩu -->
+    <div id="passwordState">
       <div class="login-mark"><span></span></div>
       <h1>POP-AI — Quản trị</h1>
-      <p class="section-gap">Đang kiểm tra quyền truy cập…</p>
-    </div>
+      <p class="section-gap">Nhập mật khẩu quản trị để tiếp tục.</p>
 
-    <!-- Trạng thái: không có quyền -->
-    <div id="deniedState" style="display:none;">
-      <div class="login-mark"><span></span></div>
-      <h1>Không có quyền truy cập</h1>
-      <p class="section-gap">Trang này chỉ dành cho tài khoản có vai trò <strong>giáo viên</strong>. Hãy đăng nhập bằng một tài khoản giáo viên rồi quay lại trang này.</p>
-      <a class="btn btn-primary" href="index.html">Về trang đăng nhập</a>
+      <form id="passwordForm">
+        <div class="field section-gap">
+          <label for="adminPassword">Mật khẩu</label>
+          <input type="password" id="adminPassword" placeholder="••••••••" autocomplete="off" required autofocus>
+        </div>
+        <button type="submit" class="auth-submit-btn" id="unlockBtn">Vào trang quản trị</button>
+        <p class="auth-error" id="passwordError"></p>
+      </form>
     </div>
 
     <!-- Trạng thái: đã xác thực, hiển thị công cụ quản trị -->
@@ -59,8 +60,7 @@
       </form>
 
       <div class="auth-link-row">
-        <button type="button" id="logoutBtn">Đăng xuất</button>
-        <a href="app.html">Về trang chính</a>
+        <button type="button" id="lockBtn">Khoá lại trang</button>
       </div>
     </div>
 
