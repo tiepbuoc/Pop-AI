@@ -19,7 +19,11 @@ import {
 
 // ---- Cấu hình LLM (test only — xem cảnh báo ở đầu file) ----
 const API_URL = "https://api.shopaikey.com/v1/chat/completions";
-const MODEL = "gpt-5-mini";
+// Danh sách model theo thứ tự ưu tiên: gặp HTTP 503 (quá tải) thì chuyển sang model kế tiếp.
+const MODELS = ["gpt-5-mini", "gpt-4o-mini", "gpt-4.1-mini-2025-04-14"];
+// Nhớ model đang dùng được để các lần sau gọi thẳng, không dò lại từ đầu.
+// Chỉ khi cả 3 model đều 503 mới đặt lại về 0 để lần sau kiểm tra lại từng model.
+let activeModelIndex = 0;
 const API_KEY = "sk-4150297863e3eee405805e8609648e6c5cebb1b502ffb46e"; // test only — nhớ thu hồi key này sau khi test xong
 
 const MAX_HISTORY_MESSAGES = 12;
@@ -144,6 +148,47 @@ async function saveMessage(uid, role, content) {
   await push(chatHistoryRef(uid), { role, content, createdAt: rtdbServerTimestamp() });
 }
 
+/**
+ * Gọi LLM, tự động chuyển model khi gặp 503.
+ * Bắt đầu từ model đang chạy tốt gần nhất (activeModelIndex), xoay vòng qua đủ các model.
+ */
+async function callLLMWithFallback(messages) {
+  for (let i = 0; i < MODELS.length; i++) {
+    const idx = (activeModelIndex + i) % MODELS.length;
+    const model = MODELS[idx];
+
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`
+      },
+      body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1500 })
+    });
+
+    if (res.status === 503) {
+      console.warn(`POP-AI: model ${model} đang quá tải (503), thử model kế tiếp...`);
+      continue;
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.error("POP-AI LLM lỗi HTTP", res.status, errText);
+      throw new Error(`HTTP ${res.status}`); // lỗi khác 503 thì không đổi model
+    }
+
+    if (idx !== activeModelIndex) {
+      console.info(`POP-AI: chuyển sang dùng model ${model} cho các lần gọi tiếp theo.`);
+    }
+    activeModelIndex = idx; // ghi nhớ model đang hoạt động
+    return res.json();
+  }
+
+  // Cả 3 model đều 503 → lần sau kiểm tra lại từ model ưu tiên đầu tiên.
+  activeModelIndex = 0;
+  throw new Error("tất cả model đều đang quá tải (503)");
+}
+
 async function sendChat() {
   const text = chatInputEl.value.trim();
   if (!text) return;
@@ -172,21 +217,7 @@ async function sendChat() {
       { role: "user", content: text }
     ];
 
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({ model: MODEL, messages, temperature: 0.7, max_tokens: 1500 })
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("POP-AI LLM lỗi HTTP", res.status, errText);
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const data = await res.json();
+    const data = await callLLMWithFallback(messages);
     console.log("POP-AI LLM raw response:", JSON.stringify(data, null, 2)); // TODO: bỏ dòng này khi hết debug
 
     const choice = data.choices?.[0];
