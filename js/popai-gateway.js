@@ -30,7 +30,9 @@ async function postJson(path, body) {
   try {
     res = await fetch(GATEWAY_BASE_URL + path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // text/plain = "simple request": trình duyệt không gửi preflight (OPTIONS) tới n8n.
+      // Nội dung vẫn là JSON, n8n tự parse. Tránh lỗi CORS khi proxy của hosting trả lời preflight sai.
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
       body: JSON.stringify(body)
     });
   } catch (e) {
