@@ -120,7 +120,9 @@ hôm nay của **đúng học sinh đang chat**, đưa vào làm ngữ cảnh ch
 tình huống thật của từng em (VD: "3 ngày liên tiếp em vượt mục tiêu vào buổi tối, thử đổi giờ học sang
 sáng sớm xem sao") thay vì lời khuyên chung chung. Trợ lý được lập trình để: khích lệ chứ không phán xét,
 đưa tối đa 1–2 gợi ý hành động cụ thể mỗi lần, và không đưa chẩn đoán y khoa/tâm lý. Lịch sử hội thoại
-được lưu lại (Realtime Database) để giữ mạch chuyện cho những lần chat sau.
+được lưu lại (Realtime Database) để giữ mạch chuyện cho những lần chat sau. Mọi câu hỏi đi qua một
+"cổng AI" (n8n) kiểm tra đăng nhập, giới hạn số lượt hỏi và ghi nhật ký sử dụng — API key của mô hình AI
+không bao giờ xuất hiện trong trình duyệt của học sinh.
 
 ---
 

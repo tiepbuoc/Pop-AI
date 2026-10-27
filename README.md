@@ -39,10 +39,10 @@ pop-ai/
 - **Web app** (`index.html`, `app.html`, `teacher.html`, `css/`, `js/`, `icons/`, `manifest.json`) nằm
   ngay ở gốc repo — chỉ vậy thôi thì tính năng **"Deploy from a branch"** của GitHub Pages (Settings →
   Pages → chọn Branch, không cần workflow gì thêm) đã tự phục vụ được, không cần biết GitHub Actions là gì.
-- **`firebase/`** gom `firebase.json`, `firestore.rules`, `functions/` (Cloud Function Trợ lý AI) —
+- **`firebase/`** gom `firebase.json`, `firestore.rules`, `functions/` (Cloud Function cũ, không còn dùng — Trợ lý AI giờ đi qua n8n) —
   KHÔNG phải file web, chỉ dùng khi chạy `firebase deploy` từ máy, GitHub Pages không đụng tới (nhưng vì
   nằm trong cùng repo public nên thư mục này về mặt kỹ thuật vẫn xem được qua link trực tiếp — không có
-  gì bí mật trong đó, API key thật nằm ở Secret Manager chứ không phải trong code).
+  gì bí mật trong đó; API key LLM nằm trong Credentials của n8n, không nằm trong repo).
 - **Extension** chạy hoàn toàn độc lập trên máy học sinh, có form đăng nhập/đăng ký email+password ngay
   trong popup của tiện ích, tự đọc/ghi Firestore qua REST — **không** cần mở web app, không cần
   `externally_connectable`, không phụ thuộc Extension ID.
@@ -180,29 +180,33 @@ nếu không, nút tải trên trang Cài đặt sẽ đưa học sinh bản ext
 5. Giáo viên: đăng nhập, chọn "Tôi là giáo viên", nhập mã xác thực đã tạo ở bước 3 → tạo lớp → chia sẻ
    **mã lớp** cho học sinh nhập ở mục Cài đặt.
 
-## 8. (Mới) Bật Trợ lý AI thật — chạy trực tiếp trên client (bản test, không dùng Cloud Functions)
+## 8. Trợ lý AI — gọi qua POP-AI Gateway (n8n), KHÔNG còn API key trong trình duyệt
 
-Trợ lý trong mục "Trợ lý AI" của web app gọi một LLM thật (đọc kế hoạch + nhật ký của đúng học sinh đang
-chat), thay vì if/else cố định. **Bản này không dùng Cloud Functions** — mọi thứ (đọc dữ liệu Firestore,
-gọi LLM, lưu lịch sử chat) chạy thẳng trong trình duyệt, để đơn giản khi test.
+Trợ lý trong mục "Trợ lý AI" gọi một LLM thật (đọc kế hoạch + nhật ký của đúng học sinh đang chat). Từ bản
+này, **API key LLM chỉ nằm trong Credentials của n8n**; trình duyệt không bao giờ thấy key.
 
-> ⚠️ **Chỉ dùng để test.** API key nằm thẳng trong `js/assistant.js` (client-side) nên bất kỳ ai mở
-> DevTools/View Source trên trang web đều lấy được key này. Trước khi cho học sinh dùng thật, hãy đổi/thu
-> hồi key test ở `shopaikey.com`, tạo key mới, và cân nhắc quay lại phương án giấu key qua backend
-> (Cloud Function hoặc một proxy tương đương) trước khi công khai rộng rãi.
+```
+Web (js/popai-gateway.js)                     n8n (1 workflow: popai-gateway.json)
+ ├─ Firebase ID token + page_url ───────────► /popai-gw-token ── kiểm tra Origin, đăng nhập Firebase, giới hạn
+ │◄──────────── token 5 phút ───────────────── (cấp token; web tự xin lại ở phút thứ 4 nếu đang dùng)
+ └─ token + câu hỏi + page_url ─────────────► /popai-gw-chat  ── kiểm tra token, giới hạn, hạn mức
+                                               └─► LLM (key trong credential n8n)
+                                               └─► ghi log + thống kê theo từng web con (lưu trong n8n)
+```
 
-1. Mở `js/assistant.js`, sửa hằng số `API_KEY` ở đầu file thành API key thật của bạn (và `API_URL`,
-   `MODEL` nếu dùng nhà cung cấp khác `api.shopaikey.com` / `gpt-5.4-nano`).
-2. Tạo **Realtime Database** trên Firebase Console (nếu chưa có — xem mục 5) rồi deploy rules:
-   ```bash
-   cd pop-ai/firebase
-   firebase deploy --only firestore:rules,database
-   ```
-   Lịch sử hội thoại được lưu ở Realtime Database (`assistantChats/{uid}/messages`) thay vì Firestore,
-   vì giờ client tự ghi trực tiếp (không còn Admin SDK của Cloud Function đứng giữa).
-3. Chỉ cần upload lại `js/assistant.js`, `js/firebase.js` lên GitHub (Add file → Upload files → Commit),
-   Pages tự cập nhật sau khoảng nửa phút.
-4. Vào web app → mục **Trợ lý AI** → chat thử.
+Gateway **không còn dùng Firestore**: cấu hình, hạn mức, log và thống kê nằm trong n8n. Mọi trang dưới
+`https://tiepbuoc.github.io` đều gọi được AI; n8n tự ghi nhận web nào gọi (dạng `tiepbuoc.github.io/Pop-AI`).
+
+**Hướng dẫn cài đặt đầy đủ: xem `n8n/HUONG-DAN-N8N-GATEWAY.md`.** Workflow để import vào n8n:
+`n8n/popai-gateway.json`.
+
+Phía web chỉ cần:
+1. Sửa `js/gateway-config.js`: `GATEWAY_BASE_URL` (URL webhook n8n).
+2. Upload `js/` lên GitHub Pages như thường lệ.
+
+Muốn dùng cổng này cho web khác cùng domain: copy `js/popai-gateway.js` + `js/gateway-config.js` — không phải sửa workflow.
+
+> `firebase/functions/` (Cloud Function `askPopAI`) là phương án cũ, **không còn được dùng**; có thể bỏ qua.
 
 ## 9. (Mới) Can thiệp hành vi đúng lúc (friction nudge)
 
@@ -288,7 +292,7 @@ Không có bước cài đặt riêng — chỉ cần upload lại file lên Git
 - Chỉ đo được hành vi trên **trình duyệt máy tính**, không đo được app điện thoại (do giới hạn hệ điều hành, xem phần trao đổi trước).
 - Nếu một học sinh dùng nhiều máy tính khác nhau, mỗi máy ghi đè dữ liệu "hôm nay" của máy đó — dữ liệu tổng hợp giữa nhiều thiết bị chưa được cộng dồn (đủ dùng cho quy mô lớp học/nghiên cứu nhỏ; muốn chính xác hơn cần chuyển sang cộng dồn qua Cloud Functions).
 - Trước khi phát hành rộng rãi (Chrome Web Store), cần thêm Privacy Policy công khai vì extension xin quyền `identity` + theo dõi hoạt động duyệt web.
-- Trợ lý AI (mục 8) gọi API bên thứ ba (`api.shopaikey.com`) — nếu dịch vụ này đổi định dạng phản hồi hoặc ngừng hoạt động, cần cập nhật `js/assistant.js`. **API key hiện nằm thẳng trong mã nguồn client (chỉ để test)** — bất kỳ ai xem mã nguồn trang web đều lấy được key; đổi/thu hồi key trước khi triển khai thật. Nội dung chat được lưu lại trong Realtime Database (`assistantChats/{uid}/messages`) để giữ ngữ cảnh; cân nhắc thêm chính sách xoá dữ liệu định kỳ nếu triển khai thật.
+- Trợ lý AI (mục 8) đi qua n8n rồi mới tới nhà cung cấp LLM (`api.shopaikey.com`) — nếu n8n ngừng hoạt động thì trợ lý ngừng theo (các phần khác của web vẫn chạy bình thường). Gateway nhận diện web qua header `Origin` (chỉ đáng tin với trình duyệt), còn việc chặn lạm dụng dựa vào đăng nhập Firebase + giới hạn tần suất + hạn mức + công tắc tắt khẩn cấp ở n8n. Phần "dữ liệu học sinh" đưa vào prompt do trình duyệt gửi lên (đã giới hạn độ dài) nên một học sinh có thể tự chèn nội dung vào cuộc trò chuyện của chính mình — đã có chỉ dẫn ở system prompt để mô hình coi đó là dữ liệu tham khảo, không phải lệnh. Nội dung chat được lưu lại trong Realtime Database (`assistantChats/{uid}/messages`) để giữ ngữ cảnh, còn nhật ký gọi AI (không chứa nội dung chat) lưu trong bộ nhớ của n8n (300 dòng gần nhất, xem qua endpoint `/popai-gw-admin`); cân nhắc thêm chính sách xoá dữ liệu chat định kỳ nếu triển khai thật.
 - Kiểm định thống kê (mục 11) dùng biến "sau can thiệp" là nhật ký/tự đánh giá **gần nhất**, không phải giá
   trị trung bình cả tuần — khi báo cáo chính thức nên nêu rõ điều này, hoặc sửa `student.js` để lưu thêm
   trung bình 3 ngày cuối vào `classes/{id}/students`.

@@ -1,14 +1,12 @@
 /**
- * Trợ lý POP-AI — chạy HOÀN TOÀN TRÊN CLIENT (không dùng Cloud Functions).
+ * Trợ lý POP-AI — gọi AI qua POP-AI Gateway (n8n), KHÔNG còn API key trong trình duyệt.
  *
- * ⚠️ CHỈ DÙNG ĐỂ TEST: API key nằm thẳng trong file này nên bất kỳ ai mở
- * DevTools/View Source đều lấy được. Trước khi đưa cho học sinh dùng thật,
- * hãy đổi key khác (thu hồi key test này) và cân nhắc giấu key qua backend.
- *
- * Việc "cá nhân hóa" (đọc kế hoạch/nhật ký/tự đánh giá của đúng học sinh) giờ
- * đọc thẳng từ Firestore bằng SDK ở trình duyệt, dựa trên uid của người đang
- * đăng nhập (firestore.rules vẫn chặn không cho đọc dữ liệu người khác).
- * Lịch sử hội thoại được lưu ở Realtime Database (assistantChats/{uid}/messages).
+ * - Key LLM chỉ nằm trong Credentials của n8n. Trình duyệt chỉ nhận một token sống ~5 phút
+ *   (xem js/popai-gateway.js) và gửi câu hỏi tới n8n; n8n kiểm tra đăng nhập, giới hạn tần suất,
+ *   hạn mức rồi mới gọi LLM và ghi log.
+ * - System prompt, model, max_tokens do n8n quyết định. Trình duyệt chỉ gửi: câu hỏi, lịch sử ngắn
+ *   và phần "dữ liệu học sinh" (đọc từ Firestore bằng uid của chính người đang đăng nhập).
+ * - Lịch sử hội thoại vẫn lưu ở Realtime Database (assistantChats/{uid}/messages).
  */
 import {
   auth, db, rtdb, onAuthStateChanged, toast,
@@ -16,15 +14,7 @@ import {
   ref, push, get, rtdbQuery, limitToLast, rtdbServerTimestamp,
   todayKey, dateKeyOffset
 } from "./firebase.js";
-
-// ---- Cấu hình LLM (test only — xem cảnh báo ở đầu file) ----
-const API_URL = "https://api.shopaikey.com/v1/chat/completions";
-// Danh sách model theo thứ tự ưu tiên: gặp HTTP 503 (quá tải) thì chuyển sang model kế tiếp.
-const MODELS = ["gpt-5-mini", "gpt-4o-mini", "gpt-4.1-mini-2025-04-14"];
-// Nhớ model đang dùng được để các lần sau gọi thẳng, không dò lại từ đầu.
-// Chỉ khi cả 3 model đều 503 mới đặt lại về 0 để lần sau kiểm tra lại từng model.
-let activeModelIndex = 0;
-const API_KEY = "sk-4150297863e3eee405805e8609648e6c5cebb1b502ffb46e"; // test only — nhớ thu hồi key này sau khi test xong
+import { askGateway, prefetchToken, friendlyError } from "./popai-gateway.js";
 
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_USER_MESSAGE_LEN = 1000;
@@ -34,7 +24,10 @@ const chatInputEl = document.getElementById("chatInput");
 const chatSendBtn = document.getElementById("chatSendBtn");
 
 let currentUser = null;
-onAuthStateChanged(auth, (user) => { currentUser = user; });
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+  if (user) prefetchToken(); // xin sẵn token để lần chat đầu không phải chờ
+});
 
 function addBubble(role, text) {
   const wrap = document.createElement("div");
@@ -113,22 +106,7 @@ async function buildStudentContext(uid) {
   return parts.join("\n");
 }
 
-const SYSTEM_PROMPT = `Bạn là "Trợ lý POP-AI" — một người hướng dẫn đồng hành thân thiện cho học sinh THPT/THCS
-trong chương trình POP-AI (Prevent - Optimize - Perform), giúp các em giảm thói quen xem video ngắn
-(TikTok/Shorts/Reels) và rèn khả năng tập trung học tập.
-
-Nguyên tắc trả lời:
-- Luôn dựa vào DỮ LIỆU THẬT của đúng học sinh được cung cấp bên dưới — không đưa lời khuyên chung chung,
-  không bịa số liệu không có trong dữ liệu.
-- Giọng văn: gần gũi, khích lệ, không phán xét, không giáo điều. Coi học sinh là người đang cố gắng,
-  không phải người đang thất bại.
-- Đưa ra tối đa 1-2 gợi ý HÀNH ĐỘNG CỤ THỂ, khả thi trong ngày hôm nay hoặc ngày mai — không liệt kê
-  danh sách dài lý thuyết.
-- Nếu số liệu cho thấy học sinh đang tiến bộ, hãy công nhận điều đó trước khi góp ý thêm.
-- Nếu học sinh hỏi ngoài phạm vi (bài tập môn học, chuyện cá nhân không liên quan), vẫn trả lời tử tế
-  và ngắn gọn, rồi nhẹ nhàng lái về mục tiêu tập trung/giảm lướt nếu phù hợp.
-- Không đưa ra chẩn đoán y khoa/tâm lý. Đây là công cụ giáo dục, không thay thế chuyên gia.
-- Trả lời bằng tiếng Việt, độ dài khoảng 3-6 câu trừ khi học sinh yêu cầu chi tiết hơn.`;
+// System prompt đã chuyển sang n8n (phía server) để học sinh không thể sửa/đọc được.
 
 /** Lịch sử chat lưu ở Realtime Database: assistantChats/{uid}/messages/{pushId} */
 function chatHistoryRef(uid) {
@@ -146,47 +124,6 @@ async function loadHistory(uid) {
 
 async function saveMessage(uid, role, content) {
   await push(chatHistoryRef(uid), { role, content, createdAt: rtdbServerTimestamp() });
-}
-
-/**
- * Gọi LLM, tự động chuyển model khi gặp 503.
- * Bắt đầu từ model đang chạy tốt gần nhất (activeModelIndex), xoay vòng qua đủ các model.
- */
-async function callLLMWithFallback(messages) {
-  for (let i = 0; i < MODELS.length; i++) {
-    const idx = (activeModelIndex + i) % MODELS.length;
-    const model = MODELS[idx];
-
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1500 })
-    });
-
-    if (res.status === 503) {
-      console.warn(`POP-AI: model ${model} đang quá tải (503), thử model kế tiếp...`);
-      continue;
-    }
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("POP-AI LLM lỗi HTTP", res.status, errText);
-      throw new Error(`HTTP ${res.status}`); // lỗi khác 503 thì không đổi model
-    }
-
-    if (idx !== activeModelIndex) {
-      console.info(`POP-AI: chuyển sang dùng model ${model} cho các lần gọi tiếp theo.`);
-    }
-    activeModelIndex = idx; // ghi nhớ model đang hoạt động
-    return res.json();
-  }
-
-  // Cả 3 model đều 503 → lần sau kiểm tra lại từ model ưu tiên đầu tiên.
-  activeModelIndex = 0;
-  throw new Error("tất cả model đều đang quá tải (503)");
 }
 
 async function sendChat() {
@@ -211,29 +148,8 @@ async function sendChat() {
       loadHistory(uid)
     ]);
 
-    const messages = [
-      { role: "system", content: SYSTEM_PROMPT + "\n\n" + studentContext },
-      ...history,
-      { role: "user", content: text }
-    ];
-
-    const data = await callLLMWithFallback(messages);
-    console.log("POP-AI LLM raw response:", JSON.stringify(data, null, 2)); // TODO: bỏ dòng này khi hết debug
-
-    const choice = data.choices?.[0];
-    const replyText =
-      choice?.message?.content?.trim() ||
-      choice?.text?.trim() || // vài API tương thích cũ trả về "text" thay vì "message.content"
-      "";
-
-    if (!replyText) {
-      console.error("POP-AI: completion rỗng. finish_reason =", choice?.finish_reason, "| full choice:", choice);
-      throw new Error(
-        choice?.finish_reason === "length"
-          ? "hết token trước khi trả lời xong (tăng max_tokens)"
-          : "empty completion"
-      );
-    }
+    // n8n tự dựng system prompt + chọn model; ở đây chỉ gửi câu hỏi, lịch sử và dữ liệu học sinh.
+    const replyText = await askGateway({ message: text, history, context: studentContext });
 
     thinkingBubble.textContent = replyText;
 
@@ -241,8 +157,8 @@ async function sendChat() {
     await saveMessage(uid, "user", text);
     await saveMessage(uid, "assistant", replyText);
   } catch (e) {
-    console.error("POP-AI assistant error", e);
-    thinkingBubble.textContent = "Xin lỗi, trợ lý đang gặp sự cố (" + (e.message || "lỗi không rõ") + "). Thử lại sau nhé.";
+    console.error("POP-AI assistant error", e && e.code ? e.code : e);
+    thinkingBubble.textContent = friendlyError(e);
   } finally {
     chatSendBtn.disabled = false;
   }
