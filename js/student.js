@@ -57,6 +57,7 @@ function gotoPage(name) {
   document.querySelectorAll("#sideNav .nav-item").forEach(b => b.classList.toggle("active", b.dataset.page === name));
   document.querySelectorAll("#bottomNav button").forEach(b => b.classList.toggle("active", b.dataset.page === name));
   if (name === "perform") refreshReportIfVisible();
+  if (name === "settings") loadTrackerStatus(); // tiện ích có thể vừa được đăng nhập sau khi trang đã mở
 }
 document.getElementById("sideNav").addEventListener("click", e => {
   const btn = e.target.closest("[data-page]"); if (btn) gotoPage(btn.dataset.page);
@@ -93,8 +94,16 @@ document.querySelectorAll("[data-tab-switch]").forEach(btn => {
 // ---------------------------------------------------------------
 async function loadToday() {
   const key = todayKey();
-  const usageSnap = await getDoc(doc(db, "usageData", currentUser.uid, "daily", key));
-  const shortMin = usageSnap.exists() ? Math.round((usageSnap.data().totalSeconds || 0) / 60) : 0;
+  const [usageSnap, todayJournalSnap] = await Promise.all([
+    getDoc(doc(db, "usageData", currentUser.uid, "daily", key)),
+    getDoc(doc(db, "journals", currentUser.uid, "entries", key))
+  ]);
+
+  // Video ngắn hôm nay = số lớn hơn giữa tiện ích đo được và nhật ký học sinh tự khai.
+  // (Trước đây chỉ đọc từ tiện ích -> học sinh chưa cài tiện ích luôn thấy 0'.)
+  const trackedMin = usageSnap.exists() ? Math.round((usageSnap.data().totalSeconds || 0) / 60) : 0;
+  const journaledMin = todayJournalSnap.exists() ? (Number(todayJournalSnap.data().shortVideoMin) || 0) : 0;
+  const shortMin = Math.max(trackedMin, journaledMin);
   document.getElementById("statShortVideo").textContent = shortMin + "'";
 
   const sessionsQ = query(collection(db, "focusSessions", currentUser.uid, "entries"), where("dateKey", "==", key));
@@ -102,15 +111,22 @@ async function loadToday() {
   document.getElementById("statFocusSessions").textContent = sessionsSnap.size;
   document.getElementById("timerCompletedCount").textContent = sessionsSnap.size;
 
-  // streak: đếm số ngày liên tục gần nhất có nhật ký
-  let streak = 0;
-  for (let i = 0; i < 30; i++) {
+  // Chuỗi ngày liên tục có nhật ký.
+  // - Hôm nay đã có nhật ký: đếm từ hôm nay lùi về trước.
+  // - Hôm nay chưa ghi: đếm từ hôm qua (chuỗi chưa đứt, vì hôm nay vẫn còn thời gian để ghi).
+  const journaledToday = todayJournalSnap.exists();
+  let streak = journaledToday ? 1 : 0;
+  for (let i = 1; i < 30; i++) {
     const k = dateKeyOffset(-i);
     const jSnap = await getDoc(doc(db, "journals", currentUser.uid, "entries", k));
     if (jSnap.exists()) streak++; else break;
   }
   document.getElementById("statStreak").textContent = streak;
-  document.getElementById("todayDay").textContent = `Ngày ${Math.min(streak + 1, 7)} / 7`;
+
+  // "Ngày X / 7": đã ghi nhật ký hôm nay thì hôm nay chính là ngày thứ `streak`;
+  // chưa ghi thì hôm nay là ngày kế tiếp (streak + 1).
+  const dayNumber = Math.min(Math.max(journaledToday ? streak : streak + 1, 1), 7);
+  document.getElementById("todayDay").textContent = `Ngày ${dayNumber} / 7`;
   document.getElementById("weekProgressLabel").textContent = `${Math.min(streak, 7)}/7 ngày`;
   document.getElementById("weekProgressFill").style.width = `${Math.min(streak, 7) / 7 * 100}%`;
 }
@@ -558,8 +574,31 @@ async function loadReport() {
 // ---------------------------------------------------------------
 async function loadTrackerStatus() {
   const el = document.getElementById("trackerStatus");
-  const snap = await getDoc(doc(db, "usageData", currentUser.uid, "daily", todayKey()));
-  if (snap.exists()) {
+  if (!currentUser) return;
+
+  // "Đã kết nối" khi MỘT trong hai điều kiện đúng:
+  //  (1) hồ sơ users/{uid} có trackerConnectedAt — tiện ích ghi mốc này ngay lúc học sinh
+  //      đăng nhập/đăng ký trong popup, không cần đã xem video ngắn;
+  //  (2) hôm nay tiện ích đã đồng bộ số liệu xem video (usageData).
+  // Trước đây chỉ xét (2) nên học sinh vừa đăng nhập tiện ích, hoặc sang ngày mới mà chưa xem
+  // video ngắn, luôn bị báo "Chưa kết nối" dù tiện ích đang chạy bình thường.
+  let connected = false;
+  try {
+    const [userSnap, usageSnap] = await Promise.all([
+      getDoc(doc(db, "users", currentUser.uid)),   // đọc mới, vì tiện ích có thể vừa đăng nhập sau khi trang được mở
+      getDoc(doc(db, "usageData", currentUser.uid, "daily", todayKey()))
+    ]);
+    if (userSnap.exists() && userSnap.data().trackerConnectedAt) {
+      userData = { ...userData, ...userSnap.data() };
+      connected = true;
+    }
+    if (usageSnap.exists()) connected = true;
+  } catch (e) {
+    console.warn("POP-AI: không đọc được trạng thái tiện ích.", e);
+    return; // lỗi mạng/quyền: giữ nguyên trạng thái đang hiện, không báo sai
+  }
+
+  if (connected) {
     el.textContent = "Đã kết nối";
     el.className = "badge badge-low";
   } else {
