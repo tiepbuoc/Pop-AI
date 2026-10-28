@@ -286,6 +286,34 @@ Chi tiết vận hành:
 
 Không có bước cài đặt riêng — chỉ cần upload lại file lên GitHub (Add file → Upload files → Commit).
 
+## 13. (Mới) Đồng bộ hai chiều số phút xem video ngắn (tiện ích ↔ nhật ký ↔ Trang chủ)
+
+Chỉ còn **một con số** cho "thời gian xem video ngắn hôm nay", hiện giống nhau ở Trang chủ, ô nhật ký và
+popup tiện ích:
+
+- Học sinh **nhập tay** số phút trong Nhật ký rồi bấm Lưu → Trang chủ và popup tiện ích đều hiện đúng số đó
+  (nhập 20 → cả hai hiện 20).
+- Tiện ích **đo thêm** (xem thêm 1 phút) → cả hai tăng theo (20 → 21). Trang Hôm nay tự cập nhật trực tiếp,
+  popup cập nhật khi mở (và mỗi ~30 giây khi đang mở); phía nền của tiện ích đọc lại mỗi ~5 phút.
+
+Cách làm: `usageData/{uid}/daily/{ngày}` giờ có hai phần ghi **tách biệt** để không đè lên nhau:
+
+| Trường | Ai ghi | Ý nghĩa |
+|---|---|---|
+| `trackedSeconds` | tiện ích (updateMask) | số giây tiện ích tự đo |
+| `manualOffsetSeconds` | web (transaction) | chênh lệch = số nhập tay − số tiện ích đã đo (có thể âm) |
+
+Số hiển thị = `trackedSeconds + manualOffsetSeconds` (hàm `effectiveUsageSeconds` trong `js/firebase.js`).
+Dữ liệu cũ chỉ có `totalSeconds` vẫn được đọc đúng. **Không cần sửa `firestore.rules`.**
+
+**Cập nhật cho học sinh đang dùng tiện ích:** tiện ích lên phiên bản **1.1.0**. Học sinh phải tải lại file zip
+ở trang Cài đặt, giải nén đè lên thư mục cũ, rồi bấm nút tải lại (↻) ở `chrome://extensions`. Học sinh còn dùng
+bản 1.0.0 vẫn chạy bình thường nhưng số nhập tay sẽ không sang được tiện ích (bản cũ ghi đè toàn bộ tài liệu
+mỗi phút).
+
+Lưu ý: nếu học sinh nhập tay đúng lúc đang xem video, số có thể lệch tối đa khoảng 1 phút so với số tiện ích
+chưa kịp đồng bộ; sau lần đồng bộ kế tiếp (≤ 1 phút) sẽ khớp.
+
 ## Giới hạn cần biết
 
 - Vì web app và extension là hai phần triển khai độc lập, đổi domain GitHub Pages (đổi tên repo, chuyển sang tài khoản khác...) chỉ cần cập nhật `extension/config.js` (bước 6.1) — không còn phần Authorized domains/Extension ID nào phải sửa theo, vì đăng nhập email/password không phụ thuộc domain. Quên cập nhật `config.js` không làm hỏng đồng bộ dữ liệu (vẫn qua Firestore bình thường), chỉ làm nút "Mở Đồng hồ tập trung" trong friction nudge mở sai link.

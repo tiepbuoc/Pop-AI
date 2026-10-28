@@ -12,7 +12,7 @@ import {
   auth, db, rtdb, onAuthStateChanged, toast,
   doc, getDoc, collection, query, orderBy, limit, getDocs,
   ref, push, get, rtdbQuery, limitToLast, rtdbServerTimestamp,
-  todayKey, dateKeyOffset
+  todayKey, dateKeyOffset, effectiveUsageSeconds
 } from "./firebase.js";
 import { askGateway, prefetchToken, friendlyError } from "./popai-gateway.js";
 
@@ -60,7 +60,7 @@ async function buildStudentContext(uid) {
   ]);
 
   const plan = planSnap.exists() ? planSnap.data() : null;
-  const todayShortVideoMin = usageSnap.exists() ? Math.round((usageSnap.data().totalSeconds || 0) / 60) : null;
+  const todayShortVideoMin = usageSnap.exists() ? Math.round(effectiveUsageSeconds(usageSnap.data()) / 60) : null;
   const assessment = assessSnap.empty ? null : assessSnap.docs[0].data();
 
   const journalLines = [];

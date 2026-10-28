@@ -1,7 +1,8 @@
 import {
   auth, db, signOut, onAuthStateChanged, doc, getDoc, setDoc, updateDoc,
   collection, addDoc, query, orderBy, limit, getDocs, where, serverTimestamp,
-  todayKey, dateKeyOffset, toast
+  onSnapshot, runTransaction,
+  todayKey, dateKeyOffset, toast, effectiveUsageSeconds, usageWrittenByTracker
 } from "./firebase.js";
 
 let currentUser = null;
@@ -25,6 +26,7 @@ onAuthStateChanged(auth, async (user) => {
   buildAssessmentForm();
   openFocusTimerIfRequested();
   evaluateAdaptiveGoal();
+  watchTodayUsage();
 });
 
 // Được mở từ overlay "friction" của tiện ích trình duyệt (mục "can thiệp đúng khoảnh khắc")
@@ -92,6 +94,32 @@ document.querySelectorAll("[data-tab-switch]").forEach(btn => {
 // ---------------------------------------------------------------
 // TODAY
 // ---------------------------------------------------------------
+// Thời gian xem video ngắn hôm nay — MỘT con số dùng chung cho web và tiện ích:
+//   = số tiện ích tự đo + mức chỉnh tay từ nhật ký (xem effectiveUsageSeconds ở firebase.js).
+// Nhật ký đã lưu từ trước khi có cơ chế đồng bộ (không có mức chỉnh tay) vẫn được giữ lại nhờ lấy số lớn hơn.
+let todayUsageData = null;   // usageData hôm nay (null nếu chưa có)
+let todayJournaledMin = 0;   // số phút ghi trong nhật ký hôm nay
+
+function renderShortVideoStat() {
+  const effectiveMin = Math.round(effectiveUsageSeconds(todayUsageData) / 60);
+  document.getElementById("statShortVideo").textContent = Math.max(effectiveMin, todayJournaledMin) + "'";
+}
+
+// Nghe trực tiếp usageData hôm nay: tiện ích đo thêm phút nào là trang Hôm nay tự cập nhật,
+// không cần tải lại trang.
+let stopWatchingUsage = null;
+function watchTodayUsage() {
+  if (stopWatchingUsage || !currentUser) return;
+  stopWatchingUsage = onSnapshot(
+    doc(db, "usageData", currentUser.uid, "daily", todayKey()),
+    (snap) => {
+      todayUsageData = snap.exists() ? snap.data() : null;
+      renderShortVideoStat();
+    },
+    (e) => console.warn("POP-AI: không theo dõi trực tiếp được số phút hôm nay.", e)
+  );
+}
+
 async function loadToday() {
   const key = todayKey();
   const [usageSnap, todayJournalSnap] = await Promise.all([
@@ -99,12 +127,9 @@ async function loadToday() {
     getDoc(doc(db, "journals", currentUser.uid, "entries", key))
   ]);
 
-  // Video ngắn hôm nay = số lớn hơn giữa tiện ích đo được và nhật ký học sinh tự khai.
-  // (Trước đây chỉ đọc từ tiện ích -> học sinh chưa cài tiện ích luôn thấy 0'.)
-  const trackedMin = usageSnap.exists() ? Math.round((usageSnap.data().totalSeconds || 0) / 60) : 0;
-  const journaledMin = todayJournalSnap.exists() ? (Number(todayJournalSnap.data().shortVideoMin) || 0) : 0;
-  const shortMin = Math.max(trackedMin, journaledMin);
-  document.getElementById("statShortVideo").textContent = shortMin + "'";
+  todayUsageData = usageSnap.exists() ? usageSnap.data() : null;
+  todayJournaledMin = todayJournalSnap.exists() ? (Number(todayJournalSnap.data().shortVideoMin) || 0) : 0;
+  renderShortVideoStat();
 
   const sessionsQ = query(collection(db, "focusSessions", currentUser.uid, "entries"), where("dateKey", "==", key));
   const sessionsSnap = await getDocs(sessionsQ);
@@ -474,12 +499,62 @@ async function logFocusSession() {
   const check = setInterval(async () => {
     if (!currentUser) return;
     clearInterval(check);
-    const usageSnap = await getDoc(doc(db, "usageData", currentUser.uid, "daily", todayKey()));
-    if (usageSnap.exists()) {
-      document.getElementById("jShortVideo").value = Math.round((usageSnap.data().totalSeconds || 0) / 60);
+    const key = todayKey();
+    try {
+      const [journalSnap, usageSnap] = await Promise.all([
+        getDoc(doc(db, "journals", currentUser.uid, "entries", key)),
+        getDoc(doc(db, "usageData", currentUser.uid, "daily", key))
+      ]);
+      // Chỉ điền vào ô còn trống, để không đè lên thứ học sinh vừa gõ trong lúc đang tải.
+      const fill = (id, v) => {
+        const el = document.getElementById(id);
+        if (el && el.value === "" && v !== undefined && v !== null) el.value = v;
+      };
+
+      // Số phút xem video ngắn: LUÔN lấy theo số hiệu lực của hôm nay (tiện ích đo + mức chỉnh tay),
+      // nên tiện ích đo thêm phút nào là ô này khớp theo; nhật ký đã lưu từ trước vẫn được giữ nhờ lấy số lớn hơn.
+      const usageMin = usageSnap.exists() ? Math.round(effectiveUsageSeconds(usageSnap.data()) / 60) : null;
+
+      if (journalSnap.exists()) {
+        // Hôm nay đã lưu nhật ký -> nạp lại ĐÚNG những gì đã lưu, không điền đè bằng số khác.
+        // Nạp đủ mọi ô để bấm lưu lần nữa không làm mất các ô còn lại.
+        const j = journalSnap.data();
+        const savedMin = Number(j.shortVideoMin) || 0;
+        fill("jShortVideo", usageMin !== null ? Math.max(usageMin, savedMin) : savedMin);
+        fill("jSessions", j.focusSessionsCompleted);
+        fill("jFocusMin", j.totalFocusMin);
+        fill("jInterrupt", j.interruptions);
+        // 1–5: giá trị 0 nghĩa là học sinh đã để trống khi lưu -> giữ ô trống
+        fill("jTaskDone", j.taskCompletion || "");
+        fill("jFeeling", j.feeling || "");
+        fill("jGood", j.wentWell || "");
+        fill("jImprove", j.toImprove || "");
+      } else if (usageMin !== null) {
+        // Chưa có nhật ký hôm nay -> gợi ý sẵn số phút hiện có.
+        fill("jShortVideo", usageMin);
+      }
+    } catch (e) {
+      console.warn("POP-AI: không điền sẵn được nhật ký hôm nay.", e);
     }
   }, 400);
 })();
+
+// Đặt số phút hôm nay = số học sinh vừa nhập, mà KHÔNG đụng vào phần tiện ích tự đo:
+// chỉ ghi "mức chỉnh tay" = số nhập − số tiện ích đã đo. Tiện ích đo thêm thì cộng dồn lên trên.
+// Dùng transaction để đọc-rồi-ghi không bị lệch nếu tiện ích vừa đồng bộ đúng lúc đó.
+async function syncManualMinutesToUsage(targetMin) {
+  const ref = doc(db, "usageData", currentUser.uid, "daily", todayKey());
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists() ? snap.data() : null;
+    if (Math.round(effectiveUsageSeconds(data) / 60) === targetMin) return; // đã khớp sẵn -> không cần ghi
+    const trackedSec = Number(data?.trackedSeconds ?? data?.totalSeconds ?? 0) || 0;
+    tx.set(ref, {
+      manualOffsetSeconds: targetMin * 60 - trackedSec,
+      manualSetAt: serverTimestamp()
+    }, { merge: true });
+  });
+}
 
 document.getElementById("saveJournalBtn").addEventListener("click", async () => {
   const entry = {
@@ -494,7 +569,16 @@ document.getElementById("saveJournalBtn").addEventListener("click", async () => 
     createdAt: serverTimestamp()
   };
   await setDoc(doc(db, "journals", currentUser.uid, "entries", todayKey()), entry);
-  toast("Đã lưu nhật ký hôm nay.");
+
+  // Đồng bộ số phút vừa nhập sang usageData để trang Hôm nay VÀ tiện ích cùng hiện đúng số này.
+  let synced = true;
+  try {
+    await syncManualMinutesToUsage(entry.shortVideoMin);
+  } catch (e) {
+    synced = false;
+    console.warn("POP-AI: không đồng bộ được số phút nhập tay sang tiện ích.", e);
+  }
+  toast(synced ? "Đã lưu nhật ký hôm nay." : "Đã lưu nhật ký, nhưng chưa đồng bộ được số phút sang tiện ích. Hãy thử lưu lại.");
   loadToday();
   evaluateAdaptiveGoal(); // nhật ký mới có thể làm thay đổi đề xuất mục tiêu
 
@@ -533,7 +617,12 @@ async function loadReport() {
     labels.push(k.slice(5));
     const snap = await getDoc(doc(db, "journals", currentUser.uid, "entries", k));
     if (snap.exists()) {
-      shortVideoData.push(snap.data().shortVideoMin || 0);
+      let shortMin = snap.data().shortVideoMin || 0;
+      if (i === 0) { // hôm nay: tiện ích có thể đã đo thêm sau khi lưu nhật ký
+        const uSnap = await getDoc(doc(db, "usageData", currentUser.uid, "daily", k));
+        if (uSnap.exists()) shortMin = Math.max(shortMin, Math.round(effectiveUsageSeconds(uSnap.data()) / 60));
+      }
+      shortVideoData.push(shortMin);
       focusData.push(snap.data().totalFocusMin || 0);
     } else {
       shortVideoData.push(null);
@@ -592,7 +681,7 @@ async function loadTrackerStatus() {
       userData = { ...userData, ...userSnap.data() };
       connected = true;
     }
-    if (usageSnap.exists()) connected = true;
+    if (usageSnap.exists() && usageWrittenByTracker(usageSnap.data())) connected = true; // không tính tài liệu chỉ chứa số nhập tay
   } catch (e) {
     console.warn("POP-AI: không đọc được trạng thái tiện ích.", e);
     return; // lỗi mạng/quyền: giữ nguyên trạng thái đang hiện, không báo sai

@@ -38,6 +38,7 @@ function genStudentCode() {
 const HEARTBEAT_ALARM = "pop-ai-heartbeat";
 const HEARTBEAT_MINUTES = 1; // Chrome không cho phép alarm lặp lại dưới 1 phút trong bản đóng gói chính thức
 const IDLE_THRESHOLD_SEC = 15;
+const OFFSET_REFRESH_EVERY_TICKS = 5; // đọc lại mức chỉnh tay (nhập từ nhật ký trên web) mỗi ~5 phút
 const META_REFRESH_EVERY_TICKS = 15; // đọc lại kế hoạch/lớp học mỗi ~15 phút (đủ mới cho demo, tiết kiệm read)
 const MAX_SEGMENT_MS = 90 * 1000; // trần cho mỗi lần cộng dồn — chặn cộng sai khi có gián đoạn dài bất thường
 
@@ -247,6 +248,29 @@ async function addSeconds(source, seconds) {
   return day;
 }
 
+// ---------------------------------------------------------------
+// Mức chỉnh tay (manualOffsetSeconds): khi học sinh nhập tay số phút trong nhật ký trên web, web ghi
+// chênh lệch giữa số nhập và số tiện ích đã đo vào usageData hôm nay. Tiện ích đọc lại mức này để
+// popup và ngưỡng nhắc nhở dùng ĐÚNG cùng một con số với web: hiển thị = tự đo + mức chỉnh tay.
+// ---------------------------------------------------------------
+async function refreshManualOffset(session) {
+  const key = todayKey();
+  try {
+    const data = await getDocument(session.idToken, `usageData/${session.uid}/daily/${key}`);
+    const seconds = Number(data?.manualOffsetSeconds ?? 0) || 0;
+    await chrome.storage.local.set({ manualOffset: { key, seconds } });
+    return seconds;
+  } catch (e) {
+    console.warn("POP-AI: không đọc được mức chỉnh tay, dùng số đã lưu.", e);
+    return null;
+  }
+}
+
+async function getManualOffsetSec() {
+  const { manualOffset } = await chrome.storage.local.get("manualOffset");
+  return manualOffset && manualOffset.key === todayKey() ? (Number(manualOffset.seconds) || 0) : 0;
+}
+
 async function syncToday() {
   const session = await getValidIdToken();
   if (!session) return;
@@ -256,11 +280,13 @@ async function syncToday() {
   if (!day) return;
 
   try {
-    await overwriteDocument(session.idToken, `usageData/${session.uid}/daily/${key}`, {
-      totalSeconds: Math.round(day.total),
+    // Chỉ ghi phần TIỆN ÍCH TỰ ĐO (updateMask) — không ghi đè manualOffsetSeconds do web ghi khi học sinh
+    // nhập tay số phút trong nhật ký. Số hiển thị cuối cùng = trackedSeconds + manualOffsetSeconds.
+    await patchDocument(session.idToken, `usageData/${session.uid}/daily/${key}`, {
+      trackedSeconds: Math.round(day.total),
       bySource: Object.fromEntries(Object.entries(day.bySource).map(([k, v]) => [k, Math.round(v)])),
       updatedAt: new Date()
-    });
+    }, ["trackedSeconds", "bySource", "updatedAt"]);
   } catch (e) {
     console.warn("POP-AI: đồng bộ Firestore thất bại, sẽ thử lại ở lượt sau.", e);
   }
@@ -302,6 +328,15 @@ async function onHeartbeat() {
     if (valid) session = await refreshStudentMeta(valid);
   }
 
+  {
+    const { manualOffset } = await chrome.storage.local.get("manualOffset");
+    const missingToday = !manualOffset || manualOffset.key !== todayKey();
+    if (missingToday || tickCount % OFFSET_REFRESH_EVERY_TICKS === 0) {
+      const valid = await getValidIdToken();
+      if (valid) await refreshManualOffset(valid);
+    }
+  }
+
   // Chốt sổ định kỳ cho phiên đang mở (nếu có sự kiện nào đó đang "treo"
   // lâu không kết thúc, ví dụ video nền phát liên tục nhiều phút không
   // đổi trạng thái) — vừa để dashboard/Firestore có số liệu tươi mỗi
@@ -324,7 +359,8 @@ async function checkFrictionNow(session) {
   if (!session.planTargetMin || session.planTargetMin <= 0) return; // chưa có kế hoạch -> không có ngưỡng để so
   const key = todayKey();
   const { usageByDate = {} } = await chrome.storage.local.get("usageByDate");
-  const totalMinutes = Math.round((usageByDate[key]?.total || 0) / 60);
+  const offsetSec = await getManualOffsetSec();
+  const totalMinutes = Math.round(Math.max(0, (usageByDate[key]?.total || 0) + offsetSec) / 60);
   if (totalMinutes < session.planTargetMin) return;
 
   // Chỉ hiện overlay trên tab mà học sinh đang thực sự nhìn vào
@@ -454,17 +490,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === "LOGOUT") {
       await clearAuthSession();
       await clearViewSession();
+      await chrome.storage.local.remove("manualOffset");
       sendResponse({ ok: true });
     }
 
     if (msg.type === "GET_STATUS") {
-      const session = await getAuthSession();
+      let session = await getAuthSession();
+      if (session && msg.refresh) {
+        // Mở popup / đăng nhập xong -> đọc mức chỉnh tay mới nhất (tối đa chờ 2,5s để popup không bị treo khi mất mạng)
+        const valid = await getValidIdToken();
+        if (valid) {
+          session = valid;
+          await Promise.race([refreshManualOffset(valid), new Promise((r) => setTimeout(r, 2500))]);
+        }
+      }
+      const offsetSec = session ? await getManualOffsetSec() : 0;
       const { usageByDate = {} } = await chrome.storage.local.get("usageByDate");
       const vs = await getViewSession();
       // Cộng thêm phần của phiên đang mở (chưa chốt sổ) để popup hiển thị số liệu tươi,
       // không đợi tới lần commit/sync tiếp theo.
       const openElapsedSec = vs ? Math.min(Date.now() - vs.startedAt, MAX_SEGMENT_MS) / 1000 : 0;
-      const todaySeconds = (usageByDate[todayKey()] || { total: 0 }).total + openElapsedSec;
+      const todaySeconds = Math.max(0, (usageByDate[todayKey()] || { total: 0 }).total + openElapsedSec + offsetSec);
       sendResponse({
         loggedIn: !!session,
         email: session?.email,

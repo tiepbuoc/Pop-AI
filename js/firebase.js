@@ -6,7 +6,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc, query,
-  where, orderBy, limit, getDocs, serverTimestamp, onSnapshot
+  where, orderBy, limit, getDocs, serverTimestamp, onSnapshot, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getDatabase, ref, push, get, query as rtdbQuery, limitToLast, serverTimestamp as rtdbServerTimestamp
@@ -23,7 +23,7 @@ export {
   sendPasswordResetEmail, updateProfile, signOut, onAuthStateChanged,
   signInAnonymously,
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc, query,
-  where, orderBy, limit, getDocs, serverTimestamp, onSnapshot,
+  where, orderBy, limit, getDocs, serverTimestamp, onSnapshot, runTransaction,
   ref, push, get, rtdbQuery, limitToLast, rtdbServerTimestamp
 };
 
@@ -44,6 +44,23 @@ export function authErrorMessage(err) {
 }
 
 // ---- Helpers dùng chung ----
+
+// Thời gian xem video ngắn "hiệu lực" của một ngày (giây), đọc từ usageData/{uid}/daily/{ngày}.
+// Một con số duy nhất cho cả web lẫn tiện ích, gồm hai phần ghi tách biệt để không đè nhau:
+//   trackedSeconds       — tiện ích tự đo (chỉ tiện ích ghi)
+//   manualOffsetSeconds  — mức chỉnh tay từ nhật ký trên web (chỉ web ghi; có thể âm)
+// Tài liệu cũ do tiện ích bản trước ghi chỉ có totalSeconds -> coi đó là phần tự đo.
+export function effectiveUsageSeconds(data) {
+  if (!data) return 0;
+  const tracked = Number(data.trackedSeconds ?? data.totalSeconds ?? 0) || 0;
+  const offset = Number(data.manualOffsetSeconds ?? 0) || 0;
+  return Math.max(0, tracked + offset);
+}
+
+// Tài liệu usageData có do TIỆN ÍCH ghi chưa (khác với tài liệu chỉ chứa mức chỉnh tay từ web).
+export function usageWrittenByTracker(data) {
+  return !!data && (data.trackedSeconds !== undefined || data.totalSeconds !== undefined);
+}
 export function todayKey(d = new Date()) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");

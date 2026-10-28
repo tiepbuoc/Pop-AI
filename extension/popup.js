@@ -48,8 +48,9 @@ document.getElementById("logoutBtn").addEventListener("click", () => {
   chrome.runtime.sendMessage({ type: "LOGOUT" }, () => refreshView());
 });
 
-function refreshView() {
-  chrome.runtime.sendMessage({ type: "GET_STATUS" }, (res) => {
+// refresh = true: nền sẽ đọc lại mức chỉnh tay từ máy chủ (số nhập tay trong nhật ký web) trước khi trả số.
+function refreshView(refresh = true) {
+  chrome.runtime.sendMessage({ type: "GET_STATUS", refresh }, (res) => {
     if (res && res.loggedIn) {
       document.getElementById("loggedOutView").style.display = "none";
       document.getElementById("loggedInView").style.display = "block";
@@ -64,3 +65,11 @@ function refreshView() {
 }
 
 refreshView();
+
+// Popup đang mở: cập nhật số phút mỗi 5 giây (không tốn truy vấn), và đọc lại từ máy chủ mỗi 30 giây
+// để số nhập tay vừa lưu trên web cũng hiện lên.
+let popupTicks = 0;
+setInterval(() => {
+  popupTicks++;
+  refreshView(popupTicks % 6 === 0);
+}, 5000);
