@@ -266,7 +266,7 @@ function renderTable(students) {
         <td>${s.baselineShortVideoMin ?? "—"} → ${s.latestShortVideoMin ?? "—"} phút</td>
         <td>${s.focusSessionsCount ?? 0}</td>
         <td>${s.interruptionsCount ?? 0}</td>
-        <td>${s.completedDays ?? 0}/7</td>
+        <td>${s.completedDays ?? 0}/7${s.missedDays ? ` <span class="muted">(bỏ lỡ ${s.missedDays})</span>` : ""}</td>
         <td>${s.finalAssessmentScore ?? "—"}</td>
       </tr>`;
   }).join("");
@@ -301,6 +301,7 @@ document.getElementById("exportBtn").addEventListener("click", async () => {
       "Số phiên tập trung": s.focusSessionsCount ?? 0,
       "Số lần gián đoạn": s.interruptionsCount ?? 0,
       "Số ngày hoàn thành": s.completedDays ?? 0,
+      "Số ngày bỏ lỡ": s.missedDays ?? 0,
       "Điểm tự đánh giá cuối chương trình": s.finalAssessmentScore ?? ""
     };
   });

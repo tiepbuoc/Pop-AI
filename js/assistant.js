@@ -67,6 +67,10 @@ async function buildStudentContext(uid) {
   journalDocs.forEach((snap, i) => {
     if (!snap.exists()) return;
     const j = snap.data();
+    if (j.missed) {
+      journalLines.push(`- ${dateKeyOffset(-i)}: bỏ lỡ (học sinh không ghi nhật ký ngày này)`);
+      return;
+    }
     journalLines.push(
       `- ${dateKeyOffset(-i)}: video ngắn ${j.shortVideoMin ?? "?"} phút, ` +
       `tập trung ${j.totalFocusMin ?? "?"} phút (${j.focusSessionsCompleted ?? 0} phiên), ` +

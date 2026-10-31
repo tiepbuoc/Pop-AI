@@ -136,24 +136,103 @@ async function loadToday() {
   document.getElementById("statFocusSessions").textContent = sessionsSnap.size;
   document.getElementById("timerCompletedCount").textContent = sessionsSnap.size;
 
-  // Chuỗi ngày liên tục có nhật ký.
-  // - Hôm nay đã có nhật ký: đếm từ hôm nay lùi về trước.
-  // - Hôm nay chưa ghi: đếm từ hôm qua (chuỗi chưa đứt, vì hôm nay vẫn còn thời gian để ghi).
-  const journaledToday = todayJournalSnap.exists();
+  await renderProgram(key, todayJournalSnap.exists());
+}
+
+// ---------------------------------------------------------------
+// TIẾN TRÌNH 7 NGÀY — ngày bỏ lỡ vẫn được ghi nhận
+//
+// Ngày 1 = ngày học sinh ghi nhật ký đầu tiên. Từ đó mỗi ngày trôi qua đều tính vào chương trình:
+//  - Ngày có nhật ký thật  -> hoàn thành.
+//  - Ngày không ghi        -> tự tạo bản ghi "Bỏ lỡ" (missed: true), mọi số liệu để trống (null),
+//                             nội dung nhật ký là "Bỏ lỡ". Bản ghi này KHÔNG tính vào biểu đồ,
+//                             mục tiêu thích ứng hay số ngày hoàn thành.
+// Nhật ký chỉ lưu được cho đúng ngày hôm nay nên bản ghi "Bỏ lỡ" (luôn là ngày đã qua) không bao giờ đè lên nhật ký thật.
+// ---------------------------------------------------------------
+const MISSED_TEXT = "Bỏ lỡ";
+const PROGRAM_DAYS = 7;
+let backfilling = false;
+
+function addDaysToKey(dateKey, n) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return todayKey(new Date(y, m - 1, d + n));
+}
+function daysBetween(fromKey, toKey) {
+  const [y1, m1, d1] = fromKey.split("-").map(Number);
+  const [y2, m2, d2] = toKey.split("-").map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+
+async function renderProgram(todayK, journaledToday) {
+  // Đọc 1 lần toàn bộ nhật ký (số lượng nhỏ) thay vì đọc từng ngày.
+  const allSnap = await getDocs(collection(db, "journals", currentUser.uid, "entries"));
+  const entries = {};
+  allSnap.forEach(d => { entries[d.id] = d.data(); });
+  const keys = Object.keys(entries).sort();
+  const realKeys = keys.filter(k => !entries[k].missed);
+
+  // Chưa ghi nhật ký lần nào -> hôm nay là ngày 1.
+  const startKey = realKeys.length ? realKeys[0] : todayK;
+  const dayNumber = Math.min(daysBetween(startKey, todayK) + 1, PROGRAM_DAYS);
+
+  // Các ngày đã qua trong khung 7 ngày mà không có nhật ký thật -> bỏ lỡ.
+  const lastPastIdx = Math.min(daysBetween(startKey, todayK) - 1, PROGRAM_DAYS - 1);
+  const missedKeys = [];
+  for (let i = 0; i <= lastPastIdx; i++) {
+    const k = addDaysToKey(startKey, i);
+    if (!entries[k] || entries[k].missed) missedKeys.push(k);
+  }
+  const doneInWindow = realKeys.filter(k => {
+    const idx = daysBetween(startKey, k);
+    return idx >= 0 && idx < PROGRAM_DAYS;
+  }).length;
+  const recorded = Math.min(doneInWindow + missedKeys.length, PROGRAM_DAYS);
+
+  // Chuỗi ngày liên tục: chỉ tính nhật ký thật; ngày bỏ lỡ làm đứt chuỗi.
   let streak = journaledToday ? 1 : 0;
   for (let i = 1; i < 30; i++) {
-    const k = dateKeyOffset(-i);
-    const jSnap = await getDoc(doc(db, "journals", currentUser.uid, "entries", k));
-    if (jSnap.exists()) streak++; else break;
+    const e = entries[addDaysToKey(todayK, -i)];
+    if (e && !e.missed) streak++; else break;
   }
-  document.getElementById("statStreak").textContent = streak;
 
-  // "Ngày X / 7": đã ghi nhật ký hôm nay thì hôm nay chính là ngày thứ `streak`;
-  // chưa ghi thì hôm nay là ngày kế tiếp (streak + 1).
-  const dayNumber = Math.min(Math.max(journaledToday ? streak : streak + 1, 1), 7);
-  document.getElementById("todayDay").textContent = `Ngày ${dayNumber} / 7`;
-  document.getElementById("weekProgressLabel").textContent = `${Math.min(streak, 7)}/7 ngày`;
-  document.getElementById("weekProgressFill").style.width = `${Math.min(streak, 7) / 7 * 100}%`;
+  document.getElementById("statStreak").textContent = streak;
+  document.getElementById("todayDay").textContent = `Ngày ${dayNumber} / ${PROGRAM_DAYS}`;
+  document.getElementById("weekProgressLabel").textContent =
+    `${recorded}/${PROGRAM_DAYS} ngày` + (missedKeys.length ? ` (${missedKeys.length} bỏ lỡ)` : "");
+  document.getElementById("weekProgressFill").style.width = `${recorded / PROGRAM_DAYS * 100}%`;
+
+  // Ghi bản "Bỏ lỡ" cho các ngày còn thiếu (chỉ ghi những ngày chưa có bản ghi nào).
+  const toWrite = missedKeys.filter(k => !entries[k]);
+  if ((toWrite.length || (userData?.classId)) && !backfilling) {
+    backfilling = true;
+    try {
+      for (const k of toWrite) {
+        await setDoc(doc(db, "journals", currentUser.uid, "entries", k), {
+          missed: true,
+          shortVideoMin: null,
+          focusSessionsCompleted: null,
+          totalFocusMin: null,
+          interruptions: null,
+          taskCompletion: null,
+          feeling: null,
+          wentWell: MISSED_TEXT,
+          toImprove: MISSED_TEXT,
+          createdAt: serverTimestamp()
+        });
+      }
+      // Cho giáo viên thấy số ngày bỏ lỡ của học sinh.
+      if (userData?.classId) {
+        await setDoc(doc(db, "classes", userData.classId, "students", currentUser.uid), {
+          missedDays: missedKeys.length,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+    } catch (e) {
+      console.warn("POP-AI: không ghi được ngày bỏ lỡ.", e);
+    } finally {
+      backfilling = false;
+    }
+  }
 }
 
 // ---------------------------------------------------------------
@@ -308,7 +387,7 @@ async function recentJournals(days = ADAPTIVE_LOOKBACK_DAYS) {
   const keys = Array.from({ length: days }, (_, i) => dateKeyOffset(-i));
   const snaps = await Promise.all(keys.map(k => getDoc(doc(db, "journals", currentUser.uid, "entries", k))));
   return snaps
-    .map((s, i) => (s.exists() ? { dateKey: keys[i], ...s.data() } : null))
+    .map((s, i) => (s.exists() && !s.data().missed ? { dateKey: keys[i], ...s.data() } : null))
     .filter(Boolean);
 }
 
@@ -616,7 +695,7 @@ async function loadReport() {
     const k = dateKeyOffset(-i);
     labels.push(k.slice(5));
     const snap = await getDoc(doc(db, "journals", currentUser.uid, "entries", k));
-    if (snap.exists()) {
+    if (snap.exists() && !snap.data().missed) {
       let shortMin = snap.data().shortVideoMin || 0;
       if (i === 0) { // hôm nay: tiện ích có thể đã đo thêm sau khi lưu nhật ký
         const uSnap = await getDoc(doc(db, "usageData", currentUser.uid, "daily", k));
