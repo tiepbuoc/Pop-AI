@@ -5,7 +5,7 @@ import {
 
 import {
   pairUp, descriptives, pairedTTest, wilcoxonSignedRank,
-  recommendTest, interpretEffect, formatP, mean
+  recommendTest, interpretEffect, mean
 } from "./stats.js";
 
 let currentUser = null;
@@ -126,80 +126,87 @@ function renderStats() {
   const { before, after } = pairUp(currentStudents, outcome.beforeKey, outcome.afterKey);
 
   if (before.length < 2) {
-    body.innerHTML = `<p class="empty-state">Mới có ${before.length} học sinh đủ cả số liệu trước và sau — cần tối thiểu 2 cặp để kiểm định.<br><span class="muted">${outcome.missingHint}</span></p>`;
+    body.innerHTML = `<p class="empty-state">Mới có ${before.length} học sinh có đủ số liệu lúc đầu và hiện tại — cần ít nhất 2 em để đánh giá.<br><span class="muted">${outcome.missingHint}</span></p>`;
     return;
   }
 
+  // --- Phần tính toán giữ nguyên ở bên trong, chỉ không hiển thị thuật ngữ ra ngoài ---
   const dBefore = descriptives(before);
   const dAfter = descriptives(after);
   const diffs = before.map((b, i) => b - after[i]);
   const tt = pairedTTest(before, after);
   const wx = wilcoxonSignedRank(before, after);
   const rec = recommendTest(diffs);
-  const improved = diffs.filter(d => d > 0).length;
-
-  const descTable = `
-    <table>
-      <thead><tr><th>Thời điểm</th><th>n</th><th>Trung bình (M)</th><th>Độ lệch chuẩn (SD)</th><th>Trung vị</th></tr></thead>
-      <tbody>
-        <tr><td>${outcome.beforeLabel}</td><td>${dBefore.n}</td><td>${num(dBefore.mean)}</td><td>${num(dBefore.sd)}</td><td>${num(dBefore.median)}</td></tr>
-        <tr><td>${outcome.afterLabel}</td><td>${dAfter.n}</td><td>${num(dAfter.mean)}</td><td>${num(dAfter.sd)}</td><td>${num(dAfter.median)}</td></tr>
-        <tr><td><strong>Thay đổi (trước − sau)</strong></td><td>${diffs.length}</td><td><strong>${num(mean(diffs))}</strong></td><td>${num(tt.ok ? tt.sdDiff : NaN)}</td><td>${num(wx.ok ? wx.medianDiff : NaN)}</td></tr>
-      </tbody>
-    </table>`;
-
-  const ttBlock = tt.ok ? `
-    <div class="test-block ${rec.test === "ttest" ? "primary" : ""}">
-      <div class="test-head">
-        <strong>Kiểm định t ghép cặp</strong>
-        ${rec.test === "ttest" ? '<span class="badge badge-low">Kiểm định chính</span>' : '<span class="badge">Tham khảo</span>'}
-      </div>
-      <p class="stat-readout">
-        t(${tt.df}) = ${num(tt.t)}, ${formatP(tt.p)}<br>
-        Chênh lệch trung bình = ${num(tt.meanDiff)} ${outcome.unit}, KTC 95% [${num(tt.ciLow)}; ${num(tt.ciHigh)}]<br>
-        Cohen's d<sub>z</sub> = ${num(tt.dz)} (ảnh hưởng ${interpretEffect(tt.dz)}), Hedges' g = ${num(tt.hedgesG)}
-      </p>
-    </div>` : `<div class="test-block"><strong>Kiểm định t ghép cặp</strong><p class="muted">${tt.reason}</p></div>`;
-
-  const wxBlock = wx.ok ? `
-    <div class="test-block ${rec.test === "wilcoxon" ? "primary" : ""}">
-      <div class="test-head">
-        <strong>Wilcoxon signed-rank</strong>
-        ${rec.test === "wilcoxon" ? '<span class="badge badge-low">Kiểm định chính</span>' : '<span class="badge">Tham khảo</span>'}
-      </div>
-      <p class="stat-readout">
-        W = ${num(wx.W, 1)}, Z = ${num(wx.z)}, ${formatP(wx.p)} ${wx.exact ? "(xác suất chính xác)" : "(xấp xỉ chuẩn, có hiệu chỉnh liên tục)"}<br>
-        Số cặp có thay đổi = ${wx.n}${wx.zeros ? `, bỏ qua ${wx.zeros} cặp không đổi` : ""}<br>
-        Effect size r = ${num(wx.r)} (ảnh hưởng ${interpretEffect(wx.r, "r")})
-      </p>
-    </div>` : `<div class="test-block"><strong>Wilcoxon signed-rank</strong><p class="muted">${wx.reason}</p></div>`;
-
   const primary = rec.test === "ttest" ? tt : wx;
-  const pVal = primary.ok ? primary.p : NaN;
-  const sig = Number.isFinite(pVal) && pVal < 0.05;
-  const direction = mean(diffs) > 0 ? "giảm" : "tăng";
-  const effect = rec.test === "ttest"
-    ? `d<sub>z</sub> = ${num(tt.dz)}`
-    : `r = ${num(wx.r)}`;
+  const sig = primary.ok && Number.isFinite(primary.p) && primary.p < 0.05;
+  const effectLevel = !primary.ok ? "" : (rec.test === "ttest" ? interpretEffect(tt.dz) : interpretEffect(wx.r, "r"));
 
-  const conclusion = !primary.ok
-    ? `<p class="muted">Chưa đủ điều kiện để kết luận thống kê.</p>`
-    : sig
-      ? `<p><strong>Kết luận:</strong> ${outcome.label} ${direction} có ý nghĩa thống kê sau can thiệp
-         (${formatP(pVal)} &lt; .05; ${effect}, độ lớn ảnh hưởng ${rec.test === "ttest" ? interpretEffect(tt.dz) : interpretEffect(wx.r, "r")}).
-         ${improved}/${diffs.length} học sinh có cải thiện.</p>`
-      : `<p><strong>Kết luận:</strong> Chưa đủ bằng chứng thống kê cho thấy ${outcome.label.toLowerCase()} thay đổi sau can thiệp
-         (${formatP(pVal)} ≥ .05). ${improved}/${diffs.length} học sinh có cải thiện — có thể do cỡ mẫu còn nhỏ hoặc thời gian can thiệp chưa đủ dài.</p>`;
+  const total = diffs.length;
+  const improved = diffs.filter(d => d > 0).length;
+  const worse = diffs.filter(d => d < 0).length;
+  const avgChange = mean(diffs);               // > 0 nghĩa là đã giảm
+  const pct = dBefore.mean > 0 ? Math.round(Math.abs(avgChange) / dBefore.mean * 100) : null;
+  const u = outcome.unit;
+  const rnd = (x) => Number.isFinite(x) ? (Math.round(x * 10) / 10).toString().replace(".", ",") : "—";
+
+  // --- Xếp loại đơn giản ---
+  let level, badge, headline;
+  if (!primary.ok) {
+    level = "Chưa rõ"; badge = "";
+    headline = "Số liệu còn ít nên chưa nhận xét chắc chắn được.";
+  } else if (avgChange > 0 && sig && (effectLevel === "lớn" || effectLevel === "trung bình")) {
+    level = "Tốt"; badge = "badge-low";
+    headline = `Lớp đã tiến bộ rõ rệt: ${outcome.label.toLowerCase()} giảm khoảng ${rnd(avgChange)} ${u}${pct !== null ? ` (khoảng ${pct}%)` : ""}.`;
+  } else if (avgChange > 0 && (sig || improved / total >= 0.6)) {
+    level = "Khá"; badge = "badge-mid";
+    headline = `Lớp có tiến bộ: ${outcome.label.toLowerCase()} giảm khoảng ${rnd(avgChange)} ${u}, nhưng mức giảm chưa nhiều.`;
+  } else if (avgChange < 0 && sig) {
+    level = "Cần chú ý"; badge = "badge-high";
+    headline = `${outcome.label} đang tăng thêm khoảng ${rnd(Math.abs(avgChange))} ${u} so với lúc đầu.`;
+  } else {
+    level = "Chưa thay đổi nhiều"; badge = "badge-mid";
+    headline = `${outcome.label} gần như chưa thay đổi so với lúc đầu.`;
+  }
+
+  const tip = (level === "Tốt")
+    ? "Cứ tiếp tục duy trì cách làm hiện tại và khen các em đã cố gắng."
+    : (level === "Khá")
+      ? "Đang đi đúng hướng, nên động viên các em duy trì thêm một thời gian."
+      : (level === "Cần chú ý")
+        ? "Nên trò chuyện với lớp và xem lại kế hoạch/mục tiêu của các em."
+        : (level === "Chưa thay đổi nhiều")
+          ? "Có thể cần thêm thời gian, hoặc nhắc các em ghi nhật ký và bám sát kế hoạch hơn."
+          : "Chờ thêm học sinh ghi nhật ký / tự đánh giá rồi xem lại.";
+
+  const smallNote = total < 10
+    ? `<p class="muted" style="font-size:0.8rem;">Hiện mới có ${total} học sinh có số liệu nên kết quả chỉ mang tính tham khảo.</p>`
+    : "";
 
   body.innerHTML = `
-    ${descTable}
-    <p class="muted section-gap" style="font-size:0.8rem;">Cơ sở chọn kiểm định: ${rec.reason}</p>
-    <div class="test-grid">${ttBlock}${wxBlock}</div>
-    <div class="conclusion-box">${conclusion}</div>
+    <div class="conclusion-box">
+      <p><span class="badge ${badge}">${level}</span> &nbsp;<strong>${headline}</strong></p>
+      <p class="muted" style="margin-top:6px;">${tip}</p>
+    </div>
+
+    <div class="grid-2 section-gap" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+      <div class="card"><div class="stat-num" style="font-family:'Fraunces',serif;font-size:1.5rem;">${rnd(dBefore.mean)}</div><div class="muted">Trung bình lúc đầu (${u})</div></div>
+      <div class="card"><div class="stat-num" style="font-family:'Fraunces',serif;font-size:1.5rem;">${rnd(dAfter.mean)}</div><div class="muted">Trung bình hiện tại (${u})</div></div>
+      <div class="card"><div class="stat-num" style="font-family:'Fraunces',serif;font-size:1.5rem;">${improved}/${total}</div><div class="muted">Học sinh đã tiến bộ</div></div>
+    </div>
+
+    <table class="section-gap">
+      <thead><tr><th></th><th>Lúc đầu</th><th>Hiện tại</th></tr></thead>
+      <tbody>
+        <tr><td>Số học sinh</td><td>${dBefore.n}</td><td>${dAfter.n}</td></tr>
+        <tr><td>Trung bình cả lớp</td><td>${rnd(dBefore.mean)}</td><td>${rnd(dAfter.mean)}</td></tr>
+        <tr><td>Mức của em đứng giữa lớp</td><td>${rnd(dBefore.median)}</td><td>${rnd(dAfter.median)}</td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="font-size:0.8rem;">Học sinh tiến bộ: ${improved} em · giữ nguyên: ${total - improved - worse} em · tăng lên: ${worse} em. Số càng thấp càng tốt.</p>
+    ${smallNote}
     <p class="muted" style="font-size:0.78rem;">
-      Lưu ý về thiết kế: đây là nghiên cứu pre–post một nhóm, không có nhóm đối chứng, nên kết quả chưa loại trừ được
-      các yếu tố khác (hiệu ứng thời gian, hiệu ứng kỳ vọng, sự kiện trong lớp). Cần phân tích sâu hơn (ANOVA lặp lại,
-      hồi quy có biến kiểm soát) thì dùng nút <em>Xuất dữ liệu (.xlsx)</em> ở khối bên dưới rồi nạp vào JASP.
+      Đây là so sánh trên cùng một nhóm học sinh, chưa có lớp đối chứng nên kết quả chỉ để tham khảo.
+      Cần xem sâu hơn thì dùng nút <em>Xuất dữ liệu (.xlsx)</em> ở khối bên dưới.
     </p>`;
 }
 
